@@ -156,9 +156,7 @@
 (defn kvserver
   [opts topics {:keys [deserializer serializer listener]} sink!]
   (let [run?     (atom true)
-        consumer (KafkaConsumer. (opts->props opts)
-                                 deserializer
-                                 serializer)
+        consumer (KafkaConsumer. (opts->props opts) deserializer serializer)
         driver   (consumer-driver consumer (fn [] (reset! run? false)))]
     (future
       (try
