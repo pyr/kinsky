@@ -252,7 +252,15 @@
 
 (defn consumer->driver
   "Given a consumer-driver and an optional callback to callback
-   to call when stopping, yield a consumer driver."
+   to call when stopping, yield a consumer driver.
+
+   The consumer driver implements the following protocols:
+
+   - [ConsumerDriver](#var-ConsumerDriver)
+   - [MetadataDriver](#var-MetadataDriver)
+   - `clojure.lang.IDeref`: `deref` to access underlying
+     [KafkaConsumer](http://kafka.apache.org/090/javadoc/org/apache/kafka/clients/producer/KafkaConsumer.html)
+     instance."
   ([^KafkaConsumer consumer]
    (consumer->driver consumer nil))
   ([^KafkaConsumer consumer run-signal]
@@ -324,7 +332,13 @@
 
 (defn producer->driver
   "Yield a driver from a Kafka Producer.
-   The producer implements "
+   The producer driver implements the following protocols:
+
+   - [ProducerDriver](#var-ProducerDriver)
+   - [MetadataDriver](#var-MetadataDriver)
+   - `clojure.lang.IDeref`: `deref` to access underlying
+     [KafkaProducer](http://kafka.apache.org/090/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html)
+     instance."
   [producer]
   (reify
     ProducerDriver
