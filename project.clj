@@ -1,4 +1,4 @@
-(defproject spootnik/kinsky "0.1.1"
+(defproject spootnik/kinsky "0.1.2"
   :description "Kafka processing library"
   :plugins [[lein-codox "0.9.1"]]
   :codox {:source-uri "https://github.com/pyr/kinsky/blob/{version}/{filepath}#L{line}"
