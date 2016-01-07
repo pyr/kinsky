@@ -8,6 +8,7 @@ for [Apache Kafka](http://kakfa.apache.org) in Clojure.
 
 Kinsky provides the following:
 
+- Kakfa 0.9.0.x compatibility
 - Adequate data representation of Kafka types.
 - Default serializer and deserializer implementations such as
   **JSON**, **EDN** and a **keyword** serializer for keys.
