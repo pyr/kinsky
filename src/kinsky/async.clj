@@ -1,5 +1,6 @@
 (ns kinsky.async
-  "core.async support in kinsky"
+  "Clojure core.async support in kinsky.
+   See https://github.com/pyr/kinsky for example usage."
   (:require [clojure.core.async :as a]
             [kinsky.client      :as client]))
 
@@ -86,8 +87,10 @@
 
    Yields a vector of three values: [consumer records ctl]
 
-   - consumer is a consumer driver, see kinsky.client/consumer
-   - records is a channel of records, see kinsky.async/record-xform
+   - consumer is a consumer driver, see
+     [kinsky.client/consumer](kinsky.client.html#var-consumer)
+   - records is a channel of records, see
+     [kinsky.client/record-xform](#var-record-xform)
      for content description
    - ctl is a channel of control messages, as given by the rebalance
      listener or exception if they were produced by the transducer.
@@ -114,3 +117,41 @@
                       v              (a/>! out v))
                     (recur (next!))))))
      [consumer out ctl])))
+
+(defn make-producer
+  "Build a producer, with or without serializers"
+  [config ks vs]
+  (cond
+    (and ks vs) (client/producer config ks vs)
+    :else       (client/producer config)))
+
+(defn producer
+  "Build a producer, reading records to send from a channel.
+
+   Arguments config ks and vs work as for kinsky.client/producer.
+
+   Yields a vector of three values: [producer records ctl]
+
+   - producer is a producer driver, see:
+     [kinsky.client/producer](kinsky.client.html#var-producer)
+   - records expects records to produce, see:
+     [kinsky.client/send!](kinsky.client.html#var-send.21)
+   - ctl is a channel which will receive any exception received
+     during production."
+  ([config]
+   (producer config nil nil))
+  ([config ks]
+   (producer config ks ks))
+  ([config ks vs]
+   (let [producer (make-producer config ks vs)
+         records  (a/chan 10)
+         ctl      (a/chan 10)]
+     (a/go
+       (loop [record (a/<! records)]
+         (when record
+           (try
+             (client/send! producer record)
+             (catch Exception e
+               (a/>! ctl e)))
+           (recur (a/<! records)))))
+     [producer records ctl])))

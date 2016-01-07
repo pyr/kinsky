@@ -1,8 +1,8 @@
 (ns kinsky.client
-  "Small clojure shim on top of the Kafka client API"
+  "Small clojure shim on top of the Kafka client API.
+   See https://github.com/pyr/kinsky for example usage."
   (:require [clojure.edn           :as edn]
-            [cheshire.core         :as json]
-            [clojure.tools.logging :refer [warn]])
+            [cheshire.core         :as json])
   (:import java.util.Properties
            java.util.regex.Pattern
            org.apache.kafka.clients.consumer.KafkaConsumer
@@ -18,23 +18,84 @@
 
 (defprotocol MetadataDriver
   "Common properties for all drivers"
-  (partitions-for [this topic]))
+  (partitions-for [this topic]
+    "Retrieve partition ownership information for a topic.
+     The result is a data representation of a
+     [PartitionInfo](http://kafka.apache.org/090/javadoc/org/apache/kafka/common/PartitionInfo.html)
+     list.
+     The structure for a partition info map is:
+
+         {:topic     \"t\"
+          :partition 0
+          :isr       [{:host \"x\" :id 0 :port 9092}]
+          :leader    {:host \"x\" :id 0 :port 9092}
+          :replicas  [{:host \"x\" :id 0 :port 9092}]"))
 
 (defprotocol ConsumerDriver
   "Driver interface for consumers"
-  (poll!          [this timeout])
-  (stop!          [this] [this timeout])
-  (pause!         [this] [this topic-partitions])
-  (resume!        [this topic-partitions])
-  (subscribe!     [this topics] [this topics listener]))
+  (poll!          [this timeout]
+    "Poll for new messages. Timeout in ms.
+     The result is a data representation of a ConsumerRecords instance.
+
+         {:partitions [[\"t\" 0] [\"t\" 1]]
+          :topics     [\"t\"]
+          :count      2
+          :by-partition {[\"t\" 0] [{:key       \"k0\"
+                                     :offset    1
+                                     :partition 0
+                                     :topic     \"t\"
+                                     :value     \"v0\"}]
+                         [\"t\" 1] [{:key       \"k1\"
+                                     :offset    1
+                                     :partition 1
+                                     :topic     \"t\"
+                                     :value     \"v1\"}]}
+          :by-topic      {\"t\" [{:key       \"k0\"
+                                  :offset    1
+                                  :partition 0
+                                  :topic     \"t\"
+                                  :value     \"v0\"}
+                                 {:key       \"k1\"
+                                  :offset    1
+                                  :partition 1
+                                  :topic     \"t\"
+                                  :value     \"v1\"}]}}")
+  (stop!          [this] [this timeout]
+    "Stop consumption.")
+  (pause!         [this] [this topic-partitions]
+    "Pause consumption.")
+  (resume!        [this topic-partitions]
+    "Resume consumption.")
+  (subscribe!     [this topics] [this topics listener]
+    "Subscribe to a topic or list of topics.
+     The topics argument can be:
+
+     - A simple string when subscribing to a single topic
+     - A regex pattern to subscribe to matching topics
+     - A sequence of strings
+
+     The optional listener argument is either a callback
+     function or an implementation of
+     [ConsumerRebalanceListener](http://kafka.apache.org/090/javadoc/org/apache/kafka/clients/consumer/ConsumerRebalanceListener.html).
+
+     When a function is supplied, it will be called on relance
+     events with a map representing the event, see
+     [kinsky.client/rebalance-listener](#var-rebalance-listener)
+     for details on the map format."))
 
 (defprotocol ProducerDriver
   "Driver interface for producers"
-  (send!          [this record] [this topic k v])
-  (flush!         [this])
-  (close!         [this] [this timeout]))
+  (send!          [this record] [this topic k v]
+    "Produce a record on a topic.
+     When using the single arity version, a map
+     with the following possible keys is expected:
+     `:key`, `:topic`, `:partition`, and `:value`.
+     ")
+  (flush!         [this]
+    "Ensure that produced messages are flushed.")
+  (close!         [this] [this timeout]
+    "Close this producer"))
 
-;; Common
 (defn serializer
   "Yield an instance of a serializer from a function of two arguments:
    a topic and the payload to serialize."
@@ -262,7 +323,8 @@
         (ProducerRecord. (str topic) value)))))
 
 (defn producer->driver
-  "Yield a driver from a Kafka Producer."
+  "Yield a driver from a Kafka Producer.
+   The producer implements "
   [producer]
   (reify
     ProducerDriver
