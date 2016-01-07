@@ -1,9 +1,9 @@
-(defproject spootnik/kinsky "0.1.3"
+(defproject spootnik/kinsky "0.1.4"
   :description "Kafka clojure client library"
   :plugins [[lein-codox "0.9.1"]]
   :url "https://github.com/pyr/kinsky"
   :license {:name "MIT License"
-            :url  "https://github.com/pyr/uncaught/tree/master/LICENSE"}
+            :url  "https://github.com/pyr/kinsky/tree/master/LICENSE"}
   :codox {:source-uri "https://github.com/pyr/kinsky/blob/{version}/{filepath}#L{line}"
           :metadata   {:doc/format :markdown}}
   :dependencies [[org.clojure/clojure            "1.7.0"]

@@ -4,49 +4,6 @@
   (:require [clojure.core.async :as a]
             [kinsky.client      :as client]))
 
-(def record-xform
-  "A transducer to explode grouped records into individual
-   entities.
-
-   When sucessful, the output of kinsky.client/poll! takes the
-   form:
-
-       {:partitions   [[\"t\" 0] [\"t\" 1]]
-        :topics       #{\"t\"}
-        :count        2
-        :by-partition {[\"t\" 0] [{:key       \"k0\"
-                                   :offset    1
-                                   :partition 0
-                                   :topic     \"t\"
-                                   :value     \"v0\"}]
-                       [\"t\" 1] [{:key       \"k1\"
-                                   :offset    1
-                                   :partition 1
-                                   :topic     \"t\"
-                                   :value     \"v1\"}]}
-        :by-topic      {\"t\" [{:key       \"k0\"
-                                :offset    1
-                                :partition 0
-                                :topic     \"t\"
-                                :value     \"v0\"}
-                               {:key       \"k1\"
-                                :offset    1
-                                :partition 1
-                                :topic     \"t\"
-                                :value     \"v1\"}]}}
-
-   To make working with the output channel easier, this
-   transducer morphs these messages into a list of
-   distinct records:
-
-       ({:key \"k0\" :offset 1 :partition 0 :topic \"t\" :value \"v0\"}
-        {:key \"k1\" :offset 1 :partition 1 :topic \"t\" :value \"v1\"}
-        ...)
-"
-  (mapcat (comp (partial mapcat identity)
-                vals
-                :by-partition)))
-
 (defn channel-listener
   "A rebalance-listener compatible call back which produces all
    events onto a channel."
@@ -90,7 +47,7 @@
    - consumer is a consumer driver, see
      [kinsky.client/consumer](kinsky.client.html#var-consumer)
    - records is a channel of records, see
-     [kinsky.client/record-xform](#var-record-xform)
+     [kinsky.client/record-xform](kinsky.client.html##var-record-xform)
      for content description
    - ctl is a channel of control messages, as given by the rebalance
      listener or exception if they were produced by the transducer.
@@ -98,7 +55,7 @@
   ([config topics]
    (consume! config nil nil topics))
   ([config kd vd topics]
-   (let [out      (a/chan 10 record-xform (fn [e] (throw e)))
+   (let [out      (a/chan 10 client/record-xform (fn [e] (throw e)))
          ctl      (a/chan 10)
          stop     (a/promise-chan)
          consumer (make-consumer config stop kd vd)

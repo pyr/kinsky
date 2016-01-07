@@ -218,6 +218,49 @@
   {:partition (.partition tp)
    :topic     (.topic tp)})
 
+(def record-xform
+  "A transducer to explode grouped records into individual
+   entities.
+
+   When sucessful, the output of kinsky.client/poll! takes the
+   form:
+
+       {:partitions   [[\"t\" 0] [\"t\" 1]]
+        :topics       #{\"t\"}
+        :count        2
+        :by-partition {[\"t\" 0] [{:key       \"k0\"
+                                   :offset    1
+                                   :partition 0
+                                   :topic     \"t\"
+                                   :value     \"v0\"}]
+                       [\"t\" 1] [{:key       \"k1\"
+                                   :offset    1
+                                   :partition 1
+                                   :topic     \"t\"
+                                   :value     \"v1\"}]}
+        :by-topic      {\"t\" [{:key       \"k0\"
+                                :offset    1
+                                :partition 0
+                                :topic     \"t\"
+                                :value     \"v0\"}
+                               {:key       \"k1\"
+                                :offset    1
+                                :partition 1
+                                :topic     \"t\"
+                                :value     \"v1\"}]}}
+
+   To make working with the output channel easier, this
+   transducer morphs these messages into a list of
+   distinct records:
+
+       ({:key \"k0\" :offset 1 :partition 0 :topic \"t\" :value \"v0\"}
+        {:key \"k1\" :offset 1 :partition 1 :topic \"t\" :value \"v1\"}
+        ...)
+"
+  (mapcat (comp (partial mapcat identity)
+                vals
+                :by-partition)))
+
 (defn cr->data
   "Yield a clojure representation of a consumer record"
   [cr]
