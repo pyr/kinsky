@@ -428,6 +428,10 @@
   ([config callback]
    (consumer->driver (KafkaConsumer. (opts->props config))
                      callback))
+  ([config kdeserializer vdeserializer]
+   (consumer->driver (KafkaConsumer. (opts->props config)
+                                     kdeserializer
+                                     vdeserializer)))
   ([config callback kdeserializer vdeserializer]
    (consumer->driver (KafkaConsumer. (opts->props config)
                                      kdeserializer
