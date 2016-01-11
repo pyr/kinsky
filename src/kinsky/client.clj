@@ -66,6 +66,8 @@
     "Pause consumption.")
   (resume!        [this topic-partitions]
     "Resume consumption.")
+  (unsubscribe!   [this]
+    "Unsubscribe from currently subscribed topics.")
   (subscribe!     [this topics] [this topics listener]
     "Subscribe to a topic or list of topics.
      The topics argument can be:
@@ -338,6 +340,8 @@
                "topic argument must be a string, regex pattern or
                collection of strings.")
        (.subscribe consumer (->topics topics) (rebalance-listener listener)))
+     (unsubscribe! [this]
+       (.unsubscribe consumer))
      MetadataDriver
      (partitions-for [this topic]
        (mapv partition-info->data (.partitionsFor consumer topic)))
