@@ -18,7 +18,7 @@ Kinsky provides the following:
 ## Usage
 
 ```clojure
-   [[spootnik/kinsky "0.1.7"]]
+   [[spootnik/kinsky "0.1.8"]]
 ```
 
 ## Documentation

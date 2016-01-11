@@ -5,6 +5,7 @@
             [cheshire.core         :as json])
   (:import java.util.Properties
            java.util.regex.Pattern
+           java.util.concurrent.TimeUnit
            org.apache.kafka.clients.consumer.KafkaConsumer
            org.apache.kafka.clients.consumer.ConsumerRebalanceListener
            org.apache.kafka.clients.producer.KafkaProducer
@@ -396,7 +397,7 @@
     (close! [this]
       (.close producer))
     (close! [this timeout]
-      (.close producer timeout ))
+      (.close producer (long timeout) TimeUnit/MILLISECONDS))
     (send! [this record]
       (.send producer (->record record)))
     (send! [this topic k v]
