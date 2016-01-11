@@ -64,7 +64,7 @@ Async facade:
                          (client/keyword-deserializer)
                          (client/edn-deserializer))]
   (client/subscribe! consumer "account")
-  (client/poll! consumer))
+  (client/poll! consumer 100))
  
 ```
 
