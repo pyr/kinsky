@@ -83,7 +83,9 @@
      When a function is supplied, it will be called on relance
      events with a map representing the event, see
      [kinsky.client/rebalance-listener](#var-rebalance-listener)
-     for details on the map format."))
+     for details on the map format.")
+  (wake-up!        [this]
+    "Safely wake-up a consumer which may be blocking during polling."))
 
 (defprotocol ProducerDriver
   "Driver interface for producers"
@@ -342,6 +344,8 @@
        (.subscribe consumer (->topics topics) (rebalance-listener listener)))
      (unsubscribe! [this]
        (.unsubscribe consumer))
+     (wake-up! [this]
+       (.wakeup consumer))
      MetadataDriver
      (partitions-for [this topic]
        (mapv partition-info->data (.partitionsFor consumer topic)))
