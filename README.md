@@ -79,7 +79,7 @@ Async facade:
   (go
     (loop [record (<! records)]
       (do-something-with record)
-      (recur (<! recors)))))
+      (recur (<! records)))))
 ```
 
 
