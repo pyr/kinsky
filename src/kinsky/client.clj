@@ -8,6 +8,7 @@
            java.util.concurrent.TimeUnit
            org.apache.kafka.clients.consumer.KafkaConsumer
            org.apache.kafka.clients.consumer.ConsumerRebalanceListener
+           org.apache.kafka.clients.consumer.OffsetAndMetadata
            org.apache.kafka.clients.producer.KafkaProducer
            org.apache.kafka.clients.producer.ProducerRecord
            org.apache.kafka.common.TopicPartition
@@ -85,6 +86,17 @@
      events with a map representing the event, see
      [kinsky.client/rebalance-listener](#var-rebalance-listener)
      for details on the map format.")
+  (commit!         [this] [this topic-offsets]
+    "Commit offsets for a consumer.
+     The topic-offsets argument must be a list of maps of the form:
+
+     ```
+     {:topic     topic
+      :partition partition
+      :offset    offset
+      :metadata  metadata}
+     ```
+     The topic and partition tuple must be unique across the whole list.")
   (wake-up!        [this]
     "Safely wake-up a consumer which may be blocking during polling."))
 
@@ -200,6 +212,11 @@
   "Yield a TopicPartition from a clojure map."
   [{:keys [topic partition]}]
   (TopicPartition. (name topic) (int partition)))
+
+(defn ->offset-metadata
+  "Yield a OffsetAndMetadata from a clojure map."
+  [{:keys [offset metadata]}]
+  (OffsetAndMetadata. offset metadata))
 
 (defn node->data
   "Yield a clojure representation of a node."
@@ -347,6 +364,13 @@
        (.unsubscribe consumer))
      (wake-up! [this]
        (.wakeup consumer))
+     (commit! [this]
+       (.commitSync consumer))
+     (commit! [this topic-offsets]
+       (.commitSync consumer
+                    (->> topic-offsets
+                         (map (juxt ->topic-partition ->offset-metadata))
+                         (reduce merge {}))))
      MetadataDriver
      (partitions-for [this topic]
        (mapv partition-info->data (.partitionsFor consumer topic)))
