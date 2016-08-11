@@ -3,7 +3,7 @@ Kinsky: Clojure Kafka client library
 
 [![Build Status](https://secure.travis-ci.org/pyr/kinsky.png)](http://travis-ci.org/pyr/kinsky)
 
-Kinsky is a *somewhat* opiniated client library
+Kinsky is a *somewhat* opinionated client library
 for [Apache Kafka](http://kakfa.apache.org) in Clojure.
 
 Kinsky provides the following:
@@ -42,7 +42,7 @@ The examples assume the following require forms:
                          (client/keyword-serializer)
                          (client/edn-serializer))]
   (client/send! p "account" :account-a {:action :login}))
- 
+
 ```
 
 Async facade:
@@ -63,9 +63,9 @@ Async facade:
                           :group.id          "mygroup"}
                          (client/keyword-deserializer)
                          (client/edn-deserializer))]
-  (client/subscribe! consumer "account")
-  (client/poll! consumer 100))
- 
+  (client/subscribe! c "account")
+  (client/poll! c 100))
+
 ```
 
 Async facade:
@@ -81,5 +81,3 @@ Async facade:
       (do-something-with record)
       (recur (<! records)))))
 ```
-
-
