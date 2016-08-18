@@ -104,12 +104,14 @@
   "Build an async consumer. Yields a vector of record and control
    channels.
 
+   Arguments config ks and vs work as for kinsky.client/consumer.
    The config map must be a valid consumer configuration map and may contain
    the following additional keys:
 
    - `:input-buffer`: Maximum backlog of control channel messages.
    - `:output-buffer`: Maximum queued consumed messages.
    - `:timeout`: Poll interval
+
 
    The resulting control channel is used to interact with the consumer driver
    and expects map payloads, whose operation is determined by their
@@ -129,7 +131,7 @@
       of 2 arguments, the consumer driver and output channel, on a woken up
       driver.
    - `:stop`: `{:op :stop}` stop and close consumer.
-   records an control message and one to interact with the consumer driver.
+
 
    The resulting output channel will emit payloads with as maps containing a
    `:type` key where `:type` may be:
@@ -219,29 +221,74 @@
   "Build a producer, reading records to send from a channel.
 
    Arguments config ks and vs work as for kinsky.client/producer.
+   The config map must be a valid consumer configuration map and may contain
+   the following additional keys:
 
-   Yields a vector of three values: [producer records ctl]
+   - `:input-buffer`: Maximum backlog of control channel messages.
+   - `:output-buffer`: Maximum queued consumed messages.
 
-   - producer is a producer driver, see:
-     [kinsky.client/producer](kinsky.client.html#var-producer)
-   - records expects records to produce, see:
-     [kinsky.client/send!](kinsky.client.html#var-send.21)
-   - ctl is a channel which will receive any exception received
-     during production."
+   Yields a vector of two values `[in out]`, an input channel and
+   an output channel.
+
+   The resulting input channel is used to interact with the producer driver
+   and expects map payloads, whose operation is determined by their
+   `:op` key. The following commands are handled:
+
+   - `:record`: `{:op :record :topic \"foo\"}` send a record out, also
+      performed when no `:op` key is present.
+   - `:flush`: `{:op :flush}`, flush unsent messages.
+   - `:partitions-for`: `{:op :partitions-for :topic \"foo\"}`, yield partition
+      info for the given topic. If a `:response` key is
+      present, produce the response there instead of on
+      the record channel.
+   - `:close`: `{:op :close}`, close the producer.
+
+   The resulting output channel will emit payloads with as maps containing a
+   `:type` key where `:type` may be:
+
+   - `:exception`: An exception raised
+   - `:partitions`: The result of a `:partitions-for` operation.
+   - `:eof`: The producer is closed.
+"
   ([config]
    (producer config nil nil))
   ([config ks]
    (producer config ks ks))
   ([config ks vs]
-   (let [producer (make-producer config ks vs)
-         records  (a/chan 10)
-         ctl      (a/chan 10)]
-     (a/go
-       (loop [record (a/<! records)]
-         (when record
-           (try
-             (client/send! producer record)
-             (catch Exception e
-               (a/>! ctl e)))
-           (recur (a/<! records)))))
-     [producer records ctl])))
+   (let [inbuf   (or (:input-buffer config) default-input-buffer)
+         outbuf  (or (:output-buffer config) default-output-buffer)
+         opts    (dissoc config :input-buffer :output-buffer)
+         driver  (make-producer opts ks vs)
+         in      (a/chan inbuf)
+         out     (a/chan outbuf)]
+     (a/go-loop []
+       (let [{:keys [op timeout callback response topic]
+              :as   record}
+             (a/<! in)]
+         (try
+           (cond
+             (= op :close)
+             (do (if timeout
+                   (client/close! driver timeout)
+                   (client/close! driver))
+                 (a/>! out {:type :eof})
+                 (a/close! out))
+
+             (= op :flush)
+             (client/flush! driver)
+
+             (= op :callback)
+             (callback driver)
+
+             (= op :partitions-for)
+             (a/>! (or response out)
+                   {:type       :partitions
+                    :partitions (client/partitions-for driver (name topic))})
+
+             :else
+             (client/send! driver (dissoc record :op)))
+           (catch Exception e
+             (a/>! out {:type :exception :exception e})))
+         (when (not= type :close)
+           (recur))))
+     [in out])))

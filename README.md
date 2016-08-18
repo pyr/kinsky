@@ -48,12 +48,10 @@ The examples assume the following require forms:
 Async facade:
 
 ```clojure
-(let [[producer records ctl] (async/producer {:bootstrap.servers "localhost:9092"}
-                                             (client/keyword-serializer)
-                                             (client/edn-serializer))]
+(let [[in out] (async/producer {:bootstrap.servers "localhost:9092"} :keyword :edn)]
    (go
-     (>! records {:topic "account" :key :account-a :value {:action :login}})
-     (>! records {:topic "account" :key :account-a :value {:action :logout}})))
+     (>! in {:topic "account" :key :account-a :value {:action :login}})
+     (>! in {:topic "account" :key :account-a :value {:action :logout}})))
 ```
 
 ### Consumption
