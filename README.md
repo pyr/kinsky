@@ -71,13 +71,26 @@ Async facade:
 Async facade:
 
 ```clojure
-(let [[consumer records ctl] (async/consume! {:bootstrap.servers "localhost:9092"
-                                              :group.id          "mygroup"}
-                                             (client/keyword-deserializer)
-                                             (client/edn-deserializer)
-                                             "account")]
-  (go
-    (loop [record (<! records)]
-      (do-something-with record)
-      (recur (<! records)))))
+(let [[out ctl] (consumer {:bootstrap.servers "localhost:9092"
+                           :group.id (str (java.util.UUID/randomUUID))}
+                          (client/string-deserializer)
+                          (client/string-deserializer))
+      topic     "tests"]
+						  
+  (a/go-loop []
+    (when-let [record (a/<! out)]
+      (println (pr-str record))
+      (recur)))
+  (a/put! ctl {:op :partitions-for :topic topic})
+  (a/put! ctl {:op :subscribe :topic topic})
+  (a/put! ctl {:op :commit})
+  (a/put! ctl {:op :pause :topic-partitions [{:topic topic :partition 0}
+                                             {:topic topic :partition 1}
+                                             {:topic topic :partition 2}
+                                             {:topic topic :partition 3}]})
+  (a/put! ctl {:op :resume :topic-partitions [{:topic topic :partition 0}
+                                              {:topic topic :partition 1}
+                                              {:topic topic :partition 2}
+                                              {:topic topic :partition 3}]})
+  (a/put! ctl {:op :stop}))
 ```

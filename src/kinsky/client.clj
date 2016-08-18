@@ -109,9 +109,11 @@
      `:key`, `:topic`, `:partition`, and `:value`.
      ")
   (flush!         [this]
-    "Ensure that produced messages are flushed.")
+    "Ensure that produced messages are flushed."))
+
+(defprotocol GenericDriver
   (close!         [this] [this timeout]
-    "Close this producer"))
+    "Close this deriver"))
 
 (defn serializer
   "Yield an instance of a serializer from a function of two arguments:
@@ -371,6 +373,9 @@
                     (->> topic-offsets
                          (map (juxt ->topic-partition ->offset-metadata))
                          (reduce merge {}))))
+    GenericDriver
+    (close! [this]
+      (.close consumer))
      MetadataDriver
      (partitions-for [this topic]
        (mapv partition-info->data (.partitionsFor consumer topic)))
@@ -417,11 +422,12 @@
      instance."
   [producer]
   (reify
-    ProducerDriver
+    GenericDriver
     (close! [this]
       (.close producer))
     (close! [this timeout]
       (.close producer (long timeout) TimeUnit/MILLISECONDS))
+    ProducerDriver
     (send! [this record]
       (.send producer (->record record)))
     (send! [this topic k v]
