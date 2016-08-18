@@ -113,7 +113,7 @@
 
 (defprotocol GenericDriver
   (close!         [this] [this timeout]
-    "Close this deriver"))
+    "Close this driver"))
 
 (defn serializer
   "Yield an instance of a serializer from a function of two arguments:
