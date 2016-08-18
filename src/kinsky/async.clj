@@ -4,12 +4,24 @@
   (:require [clojure.core.async :as a]
             [kinsky.client      :as client]))
 
+(def default-input-buffer
+  "Default amount of messages buffered on control channels."
+  10)
+
+(def default-output-buffer
+  "Default amount of messages buffered on the record channel."
+  100)
+
+(def default-timeout
+  "Default timeout, by default we poll at 100ms intervals."
+  100)
+
 (defn channel-listener
   "A rebalance-listener compatible call back which produces all
    events onto a channel."
   [ch]
   (fn [event]
-    (a/put! ch event)))
+    (a/put! ch (assoc event :type :rebalance))))
 
 (defn next-poller
   "Poll for next messages, catching exceptions and yielding them."
@@ -17,9 +29,12 @@
   (fn []
     (a/thread
       (try
-        (client/safe-poll! consumer 100)
+        (let [out (client/poll! consumer timeout)]
+          out)
+        (catch org.apache.kafka.common.errors.WakeupException we
+          {:type :woken-up})
         (catch Exception e
-          e)))))
+          {:type :exception :exception e})))))
 
 (defn exception?
   "Test if a value is a subclass of Exception"
@@ -29,14 +44,18 @@
 (defn make-consumer
   "Build a consumer, with or without deserializers"
   [config stop kd vd]
-  (let [
-        stopper    (fn [] (a/close! stop))]
+  (let [stopper (when stop (fn [] (a/close! stop)))
+        opts    (dissoc config :input-buffer :output-buffer :timeout)]
     (cond
-      (and kd vd) (client/consumer config stopper kd vd)
-      :else       (client/consumer config stopper))))
+      (and stop kd vd) (client/consumer opts stopper kd vd)
+      stop             (client/consumer opts stopper)
+      (and kd vd)      (client/consumer opts kd vd)
+      :else            (client/consumer opts))))
 
 (defn consume!
-  "Build a consumer for a topic or list of topics which
+  "[DEPRECATED] You should now prefer the `consumer` function.
+
+   Build a consumer for a topic or list of topics which
    will produce records onto a channel.
 
    Arguments config, kd and vd work as for kinsky.client/consumer
@@ -58,7 +77,7 @@
    (let [out      (a/chan 10 client/record-xform (fn [e] (throw e)))
          ctl      (a/chan 10)
          stop     (a/promise-chan)
-         consumer (make-consumer config stop kd vd)
+         consumer (make-consumer config nil kd vd)
          next!    (next-poller consumer 100)]
      (client/subscribe! consumer topics (channel-listener ctl))
      (a/go
@@ -74,6 +93,120 @@
                       v              (a/>! out v))
                     (recur (next!))))))
      [consumer out ctl])))
+
+
+(def record-xform
+  "Rely on the standard transducer but indicate that this is a record."
+  (comp client/record-xform
+        (map #(assoc % :type :record))))
+
+(defn consumer
+  "Build an async consumer. Yields a vector of record and control
+   channels.
+
+   The config map must be a valid consumer configuration map and may contain
+   the following additional keys:
+
+   - `:input-buffer`: Maximum backlog of control channel messages.
+   - `:output-buffer`: Maximum queued consumed messages.
+   - `:timeout`: Poll interval
+
+   The resulting control channel is used to interact with the consumer driver
+   and expects map payloads, whose operation is determined by their
+   `:op` key. The following commands are handled:
+
+   - `:subscribe`: `{:op :subscribe :topic \"foo\"}` subscribe to a topic.
+   - `:unsubscribe`: `{:op :unsubscribe}`, unsubscribe from all topics.
+   - `:partitions-for`: `{:op :partitions-for :topic \"foo\"}`, yield partition
+      info for the given topic. If a `:response` key is
+      present, produce the response there instead of on
+      the record channel.
+   - `commit`: `{:op :commit}` commit offsets, an optional `:topic-offsets` key
+      may be present for specific offset committing.
+   - `:pause`: `{:op :pause}` pause consumption.
+   - `:resume`: `{:op :resume}` resume consumption.
+   - `:calllback`: `{:op :callback :callback (fn [d ch])}` Execute a function
+      of 2 arguments, the consumer driver and output channel, on a woken up
+      driver.
+   - `:stop`: `{:op :stop}` stop and close consumer.
+   records an control message and one to interact with the consumer driver.
+
+   The resulting output channel will emit payloads with as maps containing a
+   `:type` key where `:type` may be:
+
+   - `:record`: A consumed record.
+   - `:exception`: An exception raised
+   - `:rebalance`: A rebalance event.
+   - `:eof`: The end of this stream.
+   - `:partitions`: The result of a `:partitions-for` operation.
+   - `:woken-up`: A notification that the consumer was woken up.
+"
+  ([config]
+   (consumer config nil nil))
+  ([config kd vd]
+   (let [inbuf    (or (:input-buffer config) default-input-buffer)
+         outbuf   (or (:output-buffer config) default-output-buffer)
+         timeout  (or (:timeout config) default-timeout)
+         ctl      (a/chan inbuf)
+         recs     (a/chan outbuf record-xform (fn [e] (throw e)))
+         out      (a/chan outbuf)
+         listener (channel-listener out)
+         driver   (make-consumer config nil kd vd)
+         next!    (next-poller driver timeout)]
+     (a/pipe recs out false)
+     (a/go
+       (loop [poller (next!)]
+         (a/alt!
+           ctl    ([{:keys [op topic topics topic-offsets
+                            response topic-partitions callback]
+                     :as payload}]
+                   (try
+                     (client/wake-up! driver)
+                     (when-let [records (a/<! poller)]
+                       (a/>! recs records))
+
+                     (cond
+                       (= op :callback)
+                       (callback driver out)
+
+                       (= op :subscribe)
+                       (client/subscribe! driver (or topics topic) listener)
+
+                       (= op :unsubscribe)
+                       (client/unsubscribe! driver)
+
+                       (and (= op :commit) topic-offsets)
+                       (client/commit! driver topic-offsets)
+
+                       (= op :commit)
+                       (client/commit! driver)
+
+                       (= op :pause)
+                       (client/pause! driver topic-partitions)
+
+                       (= op :resume)
+                       (client/resume! driver topic-partitions)
+
+                       (= op :partitions-for)
+                       (a/>! (or response out)
+                             {:type       :partitions
+                              :partitions (client/partitions-for driver topic)})
+
+                       (= op :stop)
+                       (do (a/>! out {:type :eof})
+                           (client/close! driver)
+                           (a/close! out)))
+                     (catch Exception e
+                       (do (a/>! out {:type :exception :exception e})
+                           (client/close! driver)
+                           (a/close! out))))
+                   (when (not= op :stop)
+                     (recur poller)))
+           poller ([payload]
+                   (when payload
+                     (a/put! recs payload))
+                   (recur (next!))))))
+     [out ctl])))
 
 (defn make-producer
   "Build a producer, with or without serializers"
