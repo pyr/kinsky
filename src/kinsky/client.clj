@@ -185,6 +185,36 @@
   []
   (StringDeserializer.))
 
+(def deserializers
+  {:edn     edn-deserializer
+   :keyword keyword-deserializer
+   :string  string-deserializer
+   :json    json-deserializer})
+
+(def serializers
+  {:edn     edn-serializer
+   :keyword keyword-serializer
+   :string  string-serializer
+   :json    json-serializer})
+
+(defn ->deserializer
+  [x]
+  (cond
+    (keyword? x) (if-let [f (deserializers x)]
+                   (f)
+                   (throw (ex-info "unknown deserializer alias" {})))
+    (fn? x)      (x)
+    :else        x))
+
+(defn ->serializer
+  [x]
+  (cond
+    (keyword? x) (if-let [f (serializers x)]
+                   (f)
+                   (throw (ex-info "unknown serializer alias" {})))
+    (fn? x)      (x)
+    :else        x))
+
 (defn opts->props
   "Kakfa configs are now maps of strings to strings. Morph
    an arbitrary clojure map into this representation."
@@ -312,6 +342,7 @@
   "Yield a valid object for subscription"
   [topics]
   (cond
+    (keyword? topics)          [(name topics)]
     (string? topics)           [topics]
     (sequential? topics)       (vec topics)
     (instance? Pattern topics) topics
@@ -348,6 +379,7 @@
                                                 topic-partitions))))
      (subscribe! [this topics]
        (assert (or (string? topics)
+                   (keyword? topics)
                    (instance? Pattern topics)
                    (and (instance? java.util.List topics)
                         (every? string? topics)))
@@ -356,6 +388,7 @@
        (.subscribe consumer (->topics topics)))
      (subscribe! [this topics listener]
        (assert (or (string? topics)
+                   (keyword? topics)
                    (instance? Pattern topics)
                    (and (instance? java.util.List topics)
                         (every? string? topics)))
@@ -450,12 +483,12 @@
    (producer->driver (KafkaProducer. (opts->props config))))
   ([config serializer]
    (producer->driver (KafkaProducer. (opts->props config)
-                                     serializer
-                                     serializer)))
+                                     (->serializer serializer)
+                                     (->serializer serializer))))
   ([config kserializer vserializer]
    (producer->driver (KafkaProducer. (opts->props config)
-                                     kserializer
-                                     vserializer))))
+                                     (->serializer kserializer)
+                                     (->serializer vserializer)))))
 
 (defn consumer
   "Create a consumer from a configuration and optional deserializers.
@@ -469,10 +502,10 @@
                      callback))
   ([config kdeserializer vdeserializer]
    (consumer->driver (KafkaConsumer. (opts->props config)
-                                     kdeserializer
-                                     vdeserializer)))
+                                     (->deserializer kdeserializer)
+                                     (->deserializer vdeserializer))))
   ([config callback kdeserializer vdeserializer]
    (consumer->driver (KafkaConsumer. (opts->props config)
-                                     kdeserializer
-                                     vdeserializer)
+                                     (->deserializer kdeserializer)
+                                     (->deserializer vdeserializer))
                      callback)))
