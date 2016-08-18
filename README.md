@@ -92,3 +92,21 @@ Async facade:
                                               {:topic topic :partition 3}]})
   (a/put! ctl {:op :stop}))
 ```
+
+### Examples
+
+Fusing two topics
+
+```clojure
+  (let [popts    {:bootstrap.servers "localhost:9092"}
+        copts    (assoc popts :group.id "consumer-group-id")
+        [in ctl] (kinsky.async/consumer copts :string :string)
+        [out _]  (kinsky.async/producer popts :string :string)]
+
+    (a/go
+      ;; fuse topics
+	  (a/>! ctl {:op :subscribe :topic "test1"})
+      (let [transit (a/chan 10 (map #(assoc % :topic "test2")))]
+        (a/pipe in transit)
+        (a/pipe transit out))))
+```
