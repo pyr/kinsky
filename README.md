@@ -95,7 +95,7 @@ Async facade:
 
 ### Examples
 
-Fusing two topics
+#### Fusing two topics
 
 ```clojure
   (let [popts    {:bootstrap.servers "localhost:9092"}
