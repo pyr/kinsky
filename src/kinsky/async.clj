@@ -157,57 +157,58 @@
          next!    (next-poller driver timeout)]
      (a/pipe recs out false)
      (a/go
-       (loop [poller (next!)]
-         (a/alt!
-           ctl    ([{:keys [op topic topics topic-offsets
-                            response topic-partitions callback]
-                     :as payload}]
-                   (try
-                     (client/wake-up! driver)
-                     (when-let [records (a/<! poller)]
-                       (a/>! recs records))
+       (loop [[poller payload] [(next!) nil]]
+         (let [[v c] (a/alts! (if payload
+                                [ctl [recs payload]]
+                                [ctl poller]))]
+           (condp = c
+             ctl    (let [{:keys [op topic topics topic-offsets
+                                  response topic-partitions callback]
+                           :as payload} v]
+                      (try
+                        (client/wake-up! driver)
+                        (when-let [records (a/<! poller)]
+                          (a/>! recs records))
 
-                     (cond
-                       (= op :callback)
-                       (callback driver out)
+                        (cond
+                          (= op :callback)
+                          (callback driver out)
 
-                       (= op :subscribe)
-                       (client/subscribe! driver (or topics topic) listener)
+                          (= op :subscribe)
+                          (client/subscribe! driver (or topics topic) listener)
 
-                       (= op :unsubscribe)
-                       (client/unsubscribe! driver)
+                          (= op :unsubscribe)
+                          (client/unsubscribe! driver)
 
-                       (and (= op :commit) topic-offsets)
-                       (client/commit! driver topic-offsets)
+                          (and (= op :commit) topic-offsets)
+                          (client/commit! driver topic-offsets)
 
-                       (= op :commit)
-                       (client/commit! driver)
+                          (= op :commit)
+                          (client/commit! driver)
 
-                       (= op :pause)
-                       (client/pause! driver topic-partitions)
+                          (= op :pause)
+                          (client/pause! driver topic-partitions)
 
-                       (= op :resume)
-                       (client/resume! driver topic-partitions)
+                          (= op :resume)
+                          (client/resume! driver topic-partitions)
 
-                       (= op :partitions-for)
-                       (a/>! (or response out)
-                             {:type       :partitions
-                              :partitions (client/partitions-for driver topic)})
+                          (= op :partitions-for)
+                          (a/>! (or response out)
+                                {:type       :partitions
+                                 :partitions (client/partitions-for driver topic)})
 
-                       (= op :stop)
-                       (do (a/>! out {:type :eof})
-                           (client/close! driver)
-                           (a/close! out)))
-                     (catch Exception e
-                       (do (a/>! out {:type :exception :exception e})
-                           (client/close! driver)
-                           (a/close! out))))
-                   (when (not= op :stop)
-                     (recur poller)))
-           poller ([payload]
-                   (when payload
-                     (a/put! recs payload))
-                   (recur (next!))))))
+                          (= op :stop)
+                          (do (a/>! out {:type :eof})
+                              (client/close! driver)
+                              (a/close! out)))
+                        (catch Exception e
+                          (do (a/>! out {:type :exception :exception e})
+                              (client/close! driver)
+                              (a/close! out))))
+                      (when (not= op :stop)
+                        (recur [poller payload])))
+             poller (recur [(next!) v])
+             recs   (recur [poller nil])))))
      [out ctl])))
 
 (defn make-producer
