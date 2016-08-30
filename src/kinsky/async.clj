@@ -16,26 +16,6 @@
   "Default timeout, by default we poll at 100ms intervals."
   100)
 
-(defn channel-listener
-  "A rebalance-listener compatible call back which produces all
-   events onto a channel."
-  [ch]
-  (fn [event]
-    (a/put! ch (assoc event :type :rebalance))))
-
-(defn next-poller
-  "Poll for next messages, catching exceptions and yielding them."
-  [consumer timeout]
-  (fn []
-    (a/thread
-       (.setName (Thread/currentThread) "kafka-record-poller")
-       (try
-         (client/poll! consumer timeout)
-         (catch org.apache.kafka.common.errors.WakeupException _
-           {:type :woken-up :source :poller})
-         (catch Exception e
-           {:type :exception :exception e :source :poller})))))
-
 (defn exception?
   "Test if a value is a subclass of Exception"
   [e]
@@ -49,10 +29,85 @@
       (and kd vd)      (client/consumer opts kd vd)
       :else            (client/consumer opts))))
 
+(defn channel-listener
+  "A rebalance-listener compatible call back which produces all
+   events onto a channel."
+  [ch]
+  (fn [event]
+    (a/put! ch (assoc event :type :rebalance))))
+
 (def record-xform
   "Rely on the standard transducer but indicate that this is a record."
   (comp client/record-xform
         (map #(assoc % :type :record))))
+
+(defn poller-fn
+  "Poll for next messages, catching exceptions and yielding them."
+  [driver inbuf outbuf timeout]
+  (let [ctl      (a/chan inbuf)
+        out      (a/chan outbuf)
+        recs     (a/chan outbuf record-xform (fn [e] (throw e)))
+        listener (channel-listener out)]
+    (a/pipe recs out false)
+    [ctl
+     out
+     (fn []
+       (a/thread
+         (.setName (Thread/currentThread) "kafka-record-poller")
+         (try
+           (when-let [records (client/poll! driver timeout)]
+             (a/>!! recs records)
+             true)
+           (catch org.apache.kafka.common.errors.WakeupException _
+             (let [payload       (a/<!! ctl)
+                   {:keys [op]}  payload
+                   topic-offsets (:topic-offsets payload)
+                   topic         (or (:topics payload) (:topic payload))]
+
+               (cond
+                 (= op :callback)
+                 (let [f (:callback payload)]
+                   (f driver out))
+
+                 (= op :stop)
+                 (do
+                   (a/>!! out {:type :eof})
+                   (a/close! ctl)
+                   (client/close! driver)
+                   (a/close! out)
+                   false)
+
+                 :else
+                 (or
+                  (cond
+                    (= op :subscribe)
+                    (client/subscribe! driver topic listener)
+
+                    (= op :unsubscribe)
+                    (client/unsubscribe! driver)
+
+                    (and (= op :commit) topic-offsets)
+                    (client/commit! driver topic-offsets)
+
+                    (= op :commit)
+                    (client/commit! driver)
+
+                    (= op :pause)
+                    (client/pause! driver (:topic-partitions payload))
+
+                    (= op :resume)
+                    (client/resume! driver (:topic-partitions payload))
+
+                    (= op :partitions-for)
+                    (a/>!! (or (:response payload) out)
+                           {:type       :partitions
+                            :partitions (client/partitions-for driver topic)}))
+                  true))))
+           (catch Exception e
+             (a/put! out
+                     {:type      :exception
+                      :exception e})
+             true))))]))
 
 (defn consumer
   "Build an async consumer. Yields a vector of record and control
@@ -100,70 +155,24 @@
   ([config]
    (consumer config nil nil))
   ([config kd vd]
-   (let [inbuf    (or (:input-buffer config) default-input-buffer)
-         outbuf   (or (:output-buffer config) default-output-buffer)
-         timeout  (or (:timeout config) default-timeout)
-         ctl      (a/chan inbuf)
-         recs     (a/chan outbuf record-xform (fn [e] (throw e)))
-         out      (a/chan outbuf)
-         listener (channel-listener out)
-         driver   (make-consumer config  kd vd)
-         next!    (next-poller driver timeout)]
-     (a/pipe recs out false)
+   (let [inbuf           (or (:input-buffer config) default-input-buffer)
+         outbuf          (or (:output-buffer config) default-output-buffer)
+         timeout         (or (:timeout config) default-timeout)
+         driver          (make-consumer config  kd vd)
+         gateway         (a/chan inbuf)
+         [ctl out next!] (poller-fn driver inbuf outbuf timeout)]
      (future
        (.setName (Thread/currentThread) "kafka-consumer-loop")
        (loop [poller (next!)]
          (a/alt!!
-           ctl    ([{:keys [op topic topics topic-offsets
-                            response topic-partitions callback]
-                     :as payload}]
-                   (try
-                     (client/wake-up! driver)
-                     (cond
-                       (= op :callback)
-                       (callback driver out)
-
-                       (= op :subscribe)
-                       (client/subscribe! driver (or topics topic) listener)
-
-                       (= op :unsubscribe)
-                       (client/unsubscribe! driver)
-
-                       (and (= op :commit) topic-offsets)
-                       (client/commit! driver topic-offsets)
-
-                       (= op :commit)
-                       (client/commit! driver)
-
-                       (= op :pause)
-                       (client/pause! driver topic-partitions)
-
-                       (= op :resume)
-                       (client/resume! driver topic-partitions)
-
-                       (= op :partitions-for)
-                       (a/>!! (or response out)
-                              {:type       :partitions
-                               :partitions (client/partitions-for driver topic)})
-
-                       (= op :stop)
-                       (do
-                         (a/>!! out {:type :eof :source :consumer})
-                         (client/close! driver)
-                         (a/close! out)))
-                     (catch org.apache.kafka.common.errors.WakeupException _
-                       (a/>!! out {:type :woken-up :source :consumer}))
-                     (catch Exception e
-                       (do (a/>!! out {:type :exception :exception e :source :consumer})
-                           (client/close! driver)
-                           (a/close! out))))
-                   (when (not= op :stop)
-                     (recur poller)))
-           poller ([payload]
-                   (when payload
-                     (a/>!! recs payload))
-                   (recur (next!))))))
-     [out ctl])))
+           poller  ([continue?]
+                    (when continue?
+                      (recur (next!))))
+           gateway ([payload]
+                    (a/>!! ctl payload)
+                    (client/wake-up! driver)
+                    (recur poller)))))
+     [out gateway])))
 
 (defn make-producer
   "Build a producer, with or without serializers"
