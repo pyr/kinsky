@@ -28,13 +28,13 @@
   [consumer timeout]
   (fn []
     (a/thread
-      (try
-        (let [out (client/poll! consumer timeout)]
-          out)
-        (catch org.apache.kafka.common.errors.WakeupException we
-          {:type :woken-up})
-        (catch Exception e
-          {:type :exception :exception e})))))
+       (.setName (Thread/currentThread) "kafka-record-poller")
+       (try
+         (client/poll! consumer timeout)
+         (catch org.apache.kafka.common.errors.WakeupException _
+           {:type :woken-up :source :poller})
+         (catch Exception e
+           {:type :exception :exception e :source :poller})))))
 
 (defn exception?
   "Test if a value is a subclass of Exception"
@@ -43,57 +43,11 @@
 
 (defn make-consumer
   "Build a consumer, with or without deserializers"
-  [config stop kd vd]
-  (let [stopper (when stop (fn [] (a/close! stop)))
-        opts    (dissoc config :input-buffer :output-buffer :timeout)]
+  [config kd vd]
+  (let [opts (dissoc config :input-buffer :output-buffer :timeout)]
     (cond
-      (and stop kd vd) (client/consumer opts stopper kd vd)
-      stop             (client/consumer opts stopper)
       (and kd vd)      (client/consumer opts kd vd)
       :else            (client/consumer opts))))
-
-(defn consume!
-  "[DEPRECATED] You should now prefer the `consumer` function.
-
-   Build a consumer for a topic or list of topics which
-   will produce records onto a channel.
-
-   Arguments config, kd and vd work as for kinsky.client/consumer
-   Argument topics is as for kinsky.client/subscribe
-
-   Yields a vector of three values: [consumer records ctl]
-
-   - consumer is a consumer driver, see
-     [kinsky.client/consumer](kinsky.client.html#var-consumer)
-   - records is a channel of records, see
-     [kinsky.client/record-xform](kinsky.client.html##var-record-xform)
-     for content description
-   - ctl is a channel of control messages, as given by the rebalance
-     listener or exception if they were produced by the transducer.
-   "
-  ([config topics]
-   (consume! config nil nil topics))
-  ([config kd vd topics]
-   (let [out      (a/chan 10 client/record-xform (fn [e] (throw e)))
-         ctl      (a/chan 10)
-         stop     (a/promise-chan)
-         consumer (make-consumer config nil kd vd)
-         next!    (next-poller consumer 100)]
-     (client/subscribe! consumer topics (channel-listener ctl))
-     (a/go
-       (loop [records (next!)]
-         (a/alt!
-           stop    ([_]
-                    (a/>! ctl {:type :eof})
-                    (a/close! ctl)
-                    (a/close! out))
-           records ([v]
-                    (cond
-                      (exception? v) (a/>! ctl {:type :exception :exception v})
-                      v              (a/>! out v))
-                    (recur (next!))))))
-     [consumer out ctl])))
-
 
 (def record-xform
   "Rely on the standard transducer but indicate that this is a record."
@@ -153,20 +107,18 @@
          recs     (a/chan outbuf record-xform (fn [e] (throw e)))
          out      (a/chan outbuf)
          listener (channel-listener out)
-         driver   (make-consumer config nil kd vd)
+         driver   (make-consumer config  kd vd)
          next!    (next-poller driver timeout)]
      (a/pipe recs out false)
-     (a/go
+     (future
+       (.setName (Thread/currentThread) "kafka-consumer-loop")
        (loop [poller (next!)]
-         (a/alt!
+         (a/alt!!
            ctl    ([{:keys [op topic topics topic-offsets
                             response topic-partitions callback]
                      :as payload}]
                    (try
                      (client/wake-up! driver)
-                     (when-let [records (a/<! poller)]
-                       (a/>! recs records))
-
                      (cond
                        (= op :callback)
                        (callback driver out)
@@ -190,23 +142,26 @@
                        (client/resume! driver topic-partitions)
 
                        (= op :partitions-for)
-                       (a/>! (or response out)
-                             {:type       :partitions
-                              :partitions (client/partitions-for driver topic)})
+                       (a/>!! (or response out)
+                              {:type       :partitions
+                               :partitions (client/partitions-for driver topic)})
 
                        (= op :stop)
-                       (do (a/>! out {:type :eof})
-                           (client/close! driver)
-                           (a/close! out)))
+                       (do
+                         (a/>!! out {:type :eof :source :consumer})
+                         (client/close! driver)
+                         (a/close! out)))
+                     (catch org.apache.kafka.common.errors.WakeupException _
+                       (a/>!! out {:type :woken-up :source :consumer}))
                      (catch Exception e
-                       (do (a/>! out {:type :exception :exception e})
+                       (do (a/>!! out {:type :exception :exception e :source :consumer})
                            (client/close! driver)
                            (a/close! out))))
                    (when (not= op :stop)
                      (recur poller)))
            poller ([payload]
                    (when payload
-                     (a/put! recs payload))
+                     (a/>!! recs payload))
                    (recur (next!))))))
      [out ctl])))
 

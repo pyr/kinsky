@@ -1,4 +1,4 @@
-(defproject spootnik/kinsky "0.1.13-SNAPSHOT"
+(defproject spootnik/kinsky "0.1.14"
   :description "Kafka clojure client library"
   :plugins [[lein-codox "0.9.1"]]
   :url "https://github.com/pyr/kinsky"
