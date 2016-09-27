@@ -371,12 +371,10 @@
        (.wakeup consumer))
      (pause! [this topic-partitions]
        (.pause consumer
-               (into-array TopicPartition (map ->topic-partition
-                                               topic-partitions))))
+               (map ->topic-partition topic-partitions)))
      (resume! [this topic-partitions]
        (.resume consumer
-                (into-array TopicPartition (map ->topic-partition
-                                                topic-partitions))))
+                (map ->topic-partition topic-partitions)))
      (subscribe! [this topics]
        (assert (or (string? topics)
                    (keyword? topics)
