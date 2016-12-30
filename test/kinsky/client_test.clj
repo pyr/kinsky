@@ -72,3 +72,8 @@
     (let [part (client/->topic-partition {:topic "t" :partition 1})]
       (is (= (int 1) (.partition part)))
       (is (= "t" (.topic part))))))
+
+(deftest producer
+  (testing "flush"
+    (let [producer (client/producer {:bootstrap.servers "localhost:9092"} :string :string)]
+      (client/flush! producer))))

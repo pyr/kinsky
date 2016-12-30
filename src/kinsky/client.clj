@@ -466,7 +466,7 @@
     (send! [this topic k v]
       (.send producer (->record {:key k :value v :topic topic})))
     (flush! [this]
-      (.flush this))
+      (.flush producer))
     MetadataDriver
     (partitions-for [this topic]
       (mapv partition-info->data (.partitionsFor producer topic)))
