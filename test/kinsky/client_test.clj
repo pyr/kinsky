@@ -82,3 +82,8 @@
   (testing "stop"
     (let [consumer (client/consumer {:bootstrap.servers "localhost:9092"} :string :string)]
       (client/stop! consumer))))
+
+(deftest ^:integration topics
+  (testing "collection of keywords"
+    (let [consumer (client/consumer {:bootstrap.servers "localhost:9092"} :string :string)]
+      (client/subscribe! consumer [:x :y :z]))))
