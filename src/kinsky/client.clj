@@ -3,7 +3,7 @@
    See https://github.com/pyr/kinsky for example usage."
   (:require [clojure.edn           :as edn]
             [cheshire.core         :as json])
-  (:import java.util.Properties
+  (:import java.util.Collection
            java.util.regex.Pattern
            java.util.concurrent.TimeUnit
            org.apache.kafka.clients.consumer.KafkaConsumer
@@ -342,10 +342,10 @@
   "Yield a valid object for subscription"
   [topics]
   (cond
-    (keyword? topics)          [(name topics)]
-    (string? topics)           [topics]
-    (sequential? topics)       (vec topics)
-    (instance? Pattern topics) topics
+    (keyword? topics)             [(name topics)]
+    (string? topics)              [topics]
+    (instance? Collection topics) (mapv name topics)
+    (instance? Pattern topics)    topics
     :else (throw (ex-info "topics argument is invalid" {:topics topics}))))
 
 (defn consumer->driver
@@ -380,19 +380,19 @@
        (assert (or (string? topics)
                    (keyword? topics)
                    (instance? Pattern topics)
-                   (and (instance? java.util.List topics)
-                        (every? string? topics)))
-               "topic argument must be a string, regex pattern or
-               collection of strings.")
+                   (and (instance? Collection topics)
+                        (every? (some-fn string? keyword?) topics)))
+               (str "topic argument must be a string, keyword, regex pattern or "
+                    "collection of strings or keywords."))
        (.subscribe consumer (->topics topics)))
      (subscribe! [this topics listener]
        (assert (or (string? topics)
                    (keyword? topics)
                    (instance? Pattern topics)
-                   (and (instance? java.util.List topics)
-                        (every? string? topics)))
-               "topic argument must be a string, regex pattern or
-               collection of strings.")
+                   (and (instance? Collection topics)
+                        (every? (some-fn string? keyword?) topics)))
+               (str "topic argument must be a string, keyword, regex pattern or "
+                    "collection of strings or keywords."))
        (.subscribe consumer (->topics topics) (rebalance-listener listener)))
      (unsubscribe! [this]
        (.unsubscribe consumer))

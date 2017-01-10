@@ -72,3 +72,8 @@
     (let [part (client/->topic-partition {:topic "t" :partition 1})]
       (is (= (int 1) (.partition part)))
       (is (= "t" (.topic part))))))
+
+(deftest topics
+  (testing "collection of keywords"
+    (let [consumer (client/consumer {:bootstrap.servers "localhost:9092"} :string :string)]
+      (client/subscribe! consumer [:x :y :z]))))
