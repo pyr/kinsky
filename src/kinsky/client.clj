@@ -366,6 +366,8 @@
      ConsumerDriver
      (poll! [this timeout]
        (consumer-records->data (.poll consumer timeout)))
+     (stop! [this]
+       (stop! this 0))
      (stop! [this timeout]
        (when run-signal
          (run-signal))
