@@ -73,7 +73,12 @@
       (is (= (int 1) (.partition part)))
       (is (= "t" (.topic part))))))
 
-(deftest producer
+(deftest ^:integration producer
   (testing "flush"
     (let [producer (client/producer {:bootstrap.servers "localhost:9092"} :string :string)]
       (client/flush! producer))))
+
+(deftest ^:integration consumer
+  (testing "stop"
+    (let [consumer (client/consumer {:bootstrap.servers "localhost:9092"} :string :string)]
+      (client/stop! consumer))))
