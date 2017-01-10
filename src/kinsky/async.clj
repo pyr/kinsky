@@ -67,7 +67,8 @@
                (cond
                  (= op :callback)
                  (let [f (:callback payload)]
-                   (f driver out))
+                   (or (f driver out)
+                       (not (:process-result? payload))))
 
                  (= op :stop)
                  (do
