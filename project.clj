@@ -10,4 +10,7 @@
                  [org.clojure/core.async         "0.2.385"]
                  [org.apache.kafka/kafka-clients "0.10.0.1"]
                  [cheshire                       "5.6.3"]]
+  :test-selectors {:default     (complement :integration)
+                   :integration :integration
+                   :all         (constantly true)}
   :profiles {:dev {:dependencies [[org.slf4j/slf4j-nop "1.7.22"]]}})
