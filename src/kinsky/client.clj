@@ -367,16 +367,15 @@
      (poll! [this timeout]
        (consumer-records->data (.poll consumer timeout)))
      (stop! [this timeout]
-       (run-signal)
+       (when run-signal
+         (run-signal))
        (.wakeup consumer))
      (pause! [this topic-partitions]
        (.pause consumer
-               (into-array TopicPartition (map ->topic-partition
-                                               topic-partitions))))
+               (map ->topic-partition topic-partitions)))
      (resume! [this topic-partitions]
        (.resume consumer
-                (into-array TopicPartition (map ->topic-partition
-                                                topic-partitions))))
+                (map ->topic-partition topic-partitions)))
      (subscribe! [this topics]
        (assert (or (string? topics)
                    (keyword? topics)
