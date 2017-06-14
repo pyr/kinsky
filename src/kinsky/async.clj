@@ -162,7 +162,7 @@
          driver          (make-consumer config  kd vd)
          gateway         (a/chan inbuf)
          [ctl out next!] (poller-fn driver inbuf outbuf timeout)]
-     (future
+     (a/thread
        (.setName (Thread/currentThread) "kafka-consumer-loop")
        (loop [poller (next!)]
          (a/alt!!
