@@ -28,15 +28,12 @@
      (nth [_ idx not-found]
        (nth indexed idx not-found))
      clojure.lang.ILookup
-     (valAt [_ key]
-       (case key
-         (:in :up)    up
-         (:out :down) down
-         nil))
+     (valAt [this key]
+       (valAt this key nil))
      (valAt [_ key not-found]
        (case key
-         (:in  :up)   up
-         (:out :down) down
+         (:sink  :up)    up
+         (:source :down) down
          not-found)))))
 
 
