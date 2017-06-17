@@ -55,10 +55,10 @@ The examples assume the following require forms:
 Async facade:
 
 ```clojure
-(let [[in out] (async/producer {:bootstrap.servers "localhost:9092"} :keyword :edn)]
+(let [ch (async/producer {:bootstrap.servers "localhost:9092"} :keyword :edn)]
    (go
-     (>! in {:topic "account" :key :account-a :value {:action :login}})
-     (>! in {:topic "account" :key :account-a :value {:action :logout}})))
+     (>! ch {:topic "account" :key :account-a :value {:action :login}})
+     (>! ch {:topic "account" :key :account-a :value {:action :logout}})))
 ```
 
 ### Consumption
@@ -76,28 +76,28 @@ Async facade:
 Async facade:
 
 ```clojure
-(let [[out ctl] (consumer {:bootstrap.servers "localhost:9092"
+(let [ch (consumer {:bootstrap.servers "localhost:9092"
                            :group.id (str (java.util.UUID/randomUUID))}
                           (client/string-deserializer)
                           (client/string-deserializer))
       topic     "tests"]
 						  
   (a/go-loop []
-    (when-let [record (a/<! out)]
+    (when-let [record (a/<! ch)]
       (println (pr-str record))
       (recur)))
-  (a/put! ctl {:op :partitions-for :topic topic})
-  (a/put! ctl {:op :subscribe :topic topic})
-  (a/put! ctl {:op :commit})
-  (a/put! ctl {:op :pause :topic-partitions [{:topic topic :partition 0}
+  (a/put! ch {:op :partitions-for :topic topic})
+  (a/put! ch {:op :subscribe :topic topic})
+  (a/put! ch {:op :commit})
+  (a/put! ch {:op :pause :topic-partitions [{:topic topic :partition 0}
                                              {:topic topic :partition 1}
                                              {:topic topic :partition 2}
                                              {:topic topic :partition 3}]})
-  (a/put! ctl {:op :resume :topic-partitions [{:topic topic :partition 0}
+  (a/put! ch {:op :resume :topic-partitions [{:topic topic :partition 0}
                                               {:topic topic :partition 1}
                                               {:topic topic :partition 2}
                                               {:topic topic :partition 3}]})
-  (a/put! ctl {:op :stop}))
+  (a/put! ch {:op :stop}))
 ```
 
 ### Examples
@@ -105,15 +105,15 @@ Async facade:
 #### Fusing two topics
 
 ```clojure
-  (let [popts    {:bootstrap.servers "localhost:9092"}
-        copts    (assoc popts :group.id "consumer-group-id")
-        [in ctl] (kinsky.async/consumer copts :string :string)
-        [out _]  (kinsky.async/producer popts :string :string)]
+  (let [popts {:bootstrap.servers "localhost:9092"}
+        copts (assoc popts :group.id "consumer-group-id")
+        c-ch  (kinsky.async/consumer copts :string :string)
+        p-ch  (kinsky.async/producer popts :string :string)]
 
     (a/go
       ;; fuse topics
-	  (a/>! ctl {:op :subscribe :topic "test1"})
+	  (a/>! c-ch {:op :subscribe :topic "test1"})
       (let [transit (a/chan 10 (map #(assoc % :topic "test2")))]
-        (a/pipe in transit)
-        (a/pipe transit out))))
+        (a/pipe c-ch transit)
+        (a/pipe transit p-ch))))
 ```

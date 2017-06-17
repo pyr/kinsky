@@ -2,7 +2,40 @@
   "Clojure core.async support in kinsky.
    See https://github.com/pyr/kinsky for example usage."
   (:require [clojure.core.async :as a]
+            [clojure.core.async.impl.protocols :as impl]
             [kinsky.client      :as client]))
+
+(defn duplex
+  ([up down] (duplex up down [up down]))
+  ([up down indexed]
+   (reify
+     impl/ReadPort
+     (take! [_ fn-handler]
+       (impl/take! down fn-handler))
+     impl/WritePort
+     (put! [_ val fn-handler]
+       (impl/put! up val fn-handler))
+     impl/Channel
+     (close! [_]
+       (impl/close! up)
+       (impl/close! down))
+     (closed? [_]
+       (and (impl/closed? up)
+            (impl/closed? down)))
+     clojure.lang.Indexed
+     (nth [_ idx]
+       (nth indexed idx))
+     (nth [_ idx not-found]
+       (nth indexed idx not-found))
+     clojure.lang.ILookup
+     (valAt [this key]
+       (valAt this key nil))
+     (valAt [_ key not-found]
+       (case key
+         (:sink  :up)    up
+         (:source :down) down
+         not-found)))))
+
 
 (def default-input-buffer
   "Default amount of messages buffered on control channels."
@@ -173,7 +206,7 @@
                     (a/>!! ctl payload)
                     (client/wake-up! driver)
                     (recur poller)))))
-     [out gateway])))
+     (duplex gateway out [out gateway]))))
 
 (defn make-producer
   "Build a producer, with or without serializers"
@@ -256,4 +289,4 @@
              (a/>! out {:type :exception :exception e})))
          (when (not= type :close)
            (recur))))
-     [in out])))
+     (duplex in out))))
