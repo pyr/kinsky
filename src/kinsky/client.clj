@@ -1,5 +1,5 @@
 (ns kinsky.client
-  "Small clojure shim on top of the Kafka client API.
+  "Small clojure shim on top of the Kafka client API
    See https://github.com/pyr/kinsky for example usage."
   (:require [clojure.edn           :as edn]
             [cheshire.core         :as json])
@@ -414,8 +414,7 @@
     (seek! [this topic-partition offset]
         (.seek consumer (->topic-partition topic-partition) offset))
     (position! [this topic-partition]
-        (.position consumer (->topic-partition topic-partition))))))
-
+        (.position consumer (->topic-partition topic-partition)))
     GenericDriver
     (close! [this]
       (.close consumer))
