@@ -2,7 +2,8 @@
   "Clojure core.async support in kinsky.
    See https://github.com/pyr/kinsky for example usage."
   (:require [clojure.core.async :as a]
-            [kinsky.client      :as client]))
+            [kinsky.client      :as client])
+  (:import [java.lang IllegalStateException]))
 
 (def default-input-buffer
   "Default amount of messages buffered on control channels."
@@ -24,7 +25,7 @@
 (defn make-consumer
   "Build a consumer, with or without deserializers"
   [config kd vd]
-  (let [opts (dissoc config :input-buffer :output-buffer :timeout)]
+  (let [opts (dissoc config :input-buffer :output-buffer :timeout :topic)]
     (cond
       (and kd vd)      (client/consumer opts kd vd)
       :else            (client/consumer opts))))
@@ -104,6 +105,16 @@
                            {:type       :partitions
                             :partitions (client/partitions-for driver topic)}))
                   true))))
+
+           (catch IllegalStateException e
+             ;;illegal state https://github.com/apache/kafka/commit/4e1c7d844f743e5b439447e645fa41d2f92b8b5f
+             ;;when Consumer has not yet subscribe to a topic(s)
+             (a/put! out
+               {:type :exception
+                :exception e}
+              ;;wait for 2s
+              (Thread/sleep 2000)))
+
            (catch Exception e
              (a/put! out
                      {:type      :exception
@@ -121,7 +132,7 @@
    - `:input-buffer`: Maximum backlog of control channel messages.
    - `:output-buffer`: Maximum queued consumed messages.
    - `:timeout`: Poll interval
-
+   - `:topic` : Automatically subscribe to this topic before launching loop
 
    The resulting control channel is used to interact with the consumer driver
    and expects map payloads, whose operation is determined by their
@@ -156,12 +167,15 @@
   ([config]
    (consumer config nil nil))
   ([config kd vd]
-   (let [inbuf           (or (:input-buffer config) default-input-buffer)
+   (let [topic           (:topic config)
+         inbuf           (or (:input-buffer config) default-input-buffer)
          outbuf          (or (:output-buffer config) default-output-buffer)
          timeout         (or (:timeout config) default-timeout)
-         driver          (make-consumer config  kd vd)
+         driver          (make-consumer config kd vd)
          gateway         (a/chan inbuf)
          [ctl out next!] (poller-fn driver inbuf outbuf timeout)]
+    (when topic
+      (client/subscribe! driver topic))
      (a/thread
        (.setName (Thread/currentThread) "kafka-consumer-loop")
        (loop [poller (next!)]
