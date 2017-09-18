@@ -116,8 +116,7 @@
              (a/put! out
                {:type :exception
                 :exception e}
-              ;;wait for 2s
-              (Thread/sleep 2000)))
+              true))
 
            (catch Exception e
              (a/put! out
