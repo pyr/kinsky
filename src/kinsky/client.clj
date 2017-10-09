@@ -4,19 +4,24 @@
   (:require [clojure.edn           :as edn]
             [cheshire.core         :as json])
   (:import java.util.Collection
-           java.util.regex.Pattern
+           java.util.Map
            java.util.concurrent.TimeUnit
-           org.apache.kafka.clients.consumer.KafkaConsumer
+           java.util.regex.Pattern
            org.apache.kafka.clients.consumer.ConsumerRebalanceListener
+           org.apache.kafka.clients.consumer.ConsumerRecord
+           org.apache.kafka.clients.consumer.ConsumerRecords
+           org.apache.kafka.clients.consumer.KafkaConsumer
            org.apache.kafka.clients.consumer.OffsetAndMetadata
            org.apache.kafka.clients.producer.KafkaProducer
            org.apache.kafka.clients.producer.ProducerRecord
+           org.apache.kafka.common.Node
+           org.apache.kafka.common.PartitionInfo
            org.apache.kafka.common.TopicPartition
-           org.apache.kafka.common.serialization.Serializer
+           org.apache.kafka.common.errors.WakeupException
            org.apache.kafka.common.serialization.Deserializer
-           org.apache.kafka.common.serialization.StringSerializer
+           org.apache.kafka.common.serialization.Serializer
            org.apache.kafka.common.serialization.StringDeserializer
-           org.apache.kafka.common.errors.WakeupException))
+           org.apache.kafka.common.serialization.StringSerializer))
 
 (defprotocol MetadataDriver
   "Common properties for all drivers"
@@ -163,7 +168,7 @@
   "Deserialize EDN."
   []
   (deserializer
-   (fn [_ payload]
+   (fn [_ #^"[B" payload]
      (when payload
        (edn/read-string (String. payload "UTF-8"))))))
 
@@ -171,14 +176,14 @@
   "Deserialize JSON."
   []
   (deserializer
-   (fn [_ payload]
+   (fn [_ #^"[B" payload]
      (when payload
        (json/parse-string (String. payload "UTF-8") true)))))
 
 (defn keyword-deserializer
   "Deserialize a string and then keywordize it."
   []
-  (deserializer (fn [_ k] (when k (keyword (String. k "UTF-8"))))))
+  (deserializer (fn [_ #^"[B" k] (when k (keyword (String. k "UTF-8"))))))
 
 (defn string-deserializer
   "Kafka's own string deserializer"
@@ -197,7 +202,7 @@
    :string  string-serializer
    :json    json-serializer})
 
-(defn ->deserializer
+(defn ^Deserializer ->deserializer
   [x]
   (cond
     (keyword? x) (if-let [f (deserializers x)]
@@ -206,7 +211,7 @@
     (fn? x)      (x)
     :else        x))
 
-(defn ->serializer
+(defn ^Serializer ->serializer
   [x]
   (cond
     (keyword? x) (if-let [f (serializers x)]
@@ -215,13 +220,13 @@
     (fn? x)      (x)
     :else        x))
 
-(defn opts->props
+(defn ^Map opts->props
   "Kakfa configs are now maps of strings to strings. Morph
    an arbitrary clojure map into this representation."
   [opts]
   (into {} (for [[k v] opts] [(name k) (str v)])))
 
-(defn rebalance-listener
+(defn ^ConsumerRebalanceListener rebalance-listener
   "Wrap a callback to yield an instance of a Kafka ConsumerRebalanceListener.
    The callback is a function of one argument, a map containing the following
    keys: :event, :topic and :partition. :event will be either :assigned or
@@ -229,7 +234,7 @@
   [callback]
   (if (instance? ConsumerRebalanceListener callback)
     callback
-    (let [->part  (fn [p]    {:topic (.topic p) :partition (.partition p)})
+    (let [->part  (fn [^TopicPartition p] {:topic (.topic p) :partition (.partition p)})
           ->parts (fn [ps m] (assoc m :partitions (mapv ->part ps)))]
       (reify
         ConsumerRebalanceListener
@@ -252,14 +257,14 @@
 
 (defn node->data
   "Yield a clojure representation of a node."
-  [n]
+  [^Node n]
   {:host (.host n)
    :id   (.id n)
    :port (long (.port n))})
 
 (defn partition-info->data
   "Yield a clojure representation of a partition-info."
-  [pi]
+  [^PartitionInfo pi]
   {:isr       (mapv node->data (.inSyncReplicas pi))
    :leader    (node->data (.leader pi))
    :partition (long (.partition pi))
@@ -268,7 +273,7 @@
 
 (defn topic-partition->data
   "Yield a clojure representation of a topic-partition"
-  [tp]
+  [^TopicPartition tp]
   {:partition (.partition tp)
    :topic     (.topic tp)})
 
@@ -317,7 +322,7 @@
 
 (defn cr->data
   "Yield a clojure representation of a consumer record"
-  [cr]
+  [^ConsumerRecord cr]
   {:key       (.key cr)
    :offset    (.offset cr)
    :partition (.partition cr)
@@ -326,19 +331,19 @@
 
 (defn consumer-records->data
   "Yield the clojure representation of topic"
-  [crs]
-  (let [->d  (fn [p] [(.topic p) (.partition p)])
+  [^ConsumerRecords crs]
+  (let [->d  (fn [^TopicPartition p] [(.topic p) (.partition p)])
         ps   (.partitions crs)
-        ts   (set (for [p ps] (.topic p)))
-        by-p (into {} (for [p ps] [(->d p) (mapv cr->data (.records crs p))]))
-        by-t (into {} (for [t ts] [t (mapv cr->data (.records crs t))]))]
-    {:partitions   (vec (for [p ps] [(.topic p) (.partition p)]))
+        ts   (set (for [^TopicPartition p ps] (.topic p)))
+        by-p (into {} (for [^String p ps] [(->d p) (mapv cr->data (.records crs p))]))
+        by-t (into {} (for [^String t ts] [t (mapv cr->data (.records crs t))]))]
+    {:partitions   (vec (for [^TopicPartition p ps] [(.topic p) (.partition p)]))
      :topics       ts
      :count        (.count crs)
      :by-topic     by-t
      :by-partition by-p}))
 
-(defn ->topics
+(defn ^Collection ->topics
   "Yield a valid object for subscription"
   [topics]
   (cond
@@ -454,7 +459,7 @@
    - `clojure.lang.IDeref`: `deref` to access underlying
      [KafkaProducer](http://kafka.apache.org/090/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html)
      instance."
-  [producer]
+  [^KafkaProducer producer]
   (reify
     GenericDriver
     (close! [this]
