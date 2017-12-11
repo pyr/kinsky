@@ -76,11 +76,11 @@ Async facade:
 Async facade:
 
 ```clojure
-(let [ch (consumer {:bootstrap.servers "localhost:9092"
-                           :group.id (str (java.util.UUID/randomUUID))}
-                          (client/string-deserializer)
-                          (client/string-deserializer))
-      topic     "tests"]
+(let [ch     (async/consumer {:bootstrap.servers "localhost:9092"
+                              :group.id (str (java.util.UUID/randomUUID))}
+                             (client/string-deserializer)
+                             (client/string-deserializer))
+      topic  "tests"]
 						  
   (a/go-loop []
     (when-let [record (a/<! ch)]
