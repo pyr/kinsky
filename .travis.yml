@@ -7,4 +7,3 @@ jdk:
 branches:
   except:
     - gh-pages
-                
