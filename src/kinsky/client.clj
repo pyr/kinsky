@@ -1,5 +1,5 @@
 (ns kinsky.client
-  "Small clojure shim on top of the Kafka client API.
+  "Small clojure shim on top of the Kafka client API
    See https://github.com/pyr/kinsky for example usage."
   (:require [clojure.edn           :as edn]
             [cheshire.core         :as json])
@@ -98,7 +98,11 @@
      ```
      The topic and partition tuple must be unique across the whole list.")
   (wake-up!        [this]
-    "Safely wake-up a consumer which may be blocking during polling."))
+    "Safely wake-up a consumer which may be blocking during polling.")
+  (seek!           [this] [this topic-partition offset]
+    "Overrides the fetch offsets that the consumer will use on the next poll")
+  (position!      [this] [this topic-partition]
+    "Get the offset of the next record that will be fetched (if a record with that offset exists)."))
 
 (defprotocol ProducerDriver
   "Driver interface for producers"
@@ -407,6 +411,10 @@
                     (->> topic-offsets
                          (map (juxt ->topic-partition ->offset-metadata))
                          (reduce merge {}))))
+    (seek! [this topic-partition offset]
+        (.seek consumer (->topic-partition topic-partition) offset))
+    (position! [this topic-partition]
+        (.position consumer (->topic-partition topic-partition)))
     GenericDriver
     (close! [this]
       (.close consumer))

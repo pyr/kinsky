@@ -2,7 +2,8 @@
   "Clojure core.async support in kinsky.
    See https://github.com/pyr/kinsky for example usage."
   (:require [clojure.core.async :as a]
-            [kinsky.client      :as client]))
+            [kinsky.client      :as client])
+  (:import [java.lang IllegalStateException]))
 
 (def default-input-buffer
   "Default amount of messages buffered on control channels."
@@ -24,7 +25,7 @@
 (defn make-consumer
   "Build a consumer, with or without deserializers"
   [config kd vd]
-  (let [opts (dissoc config :input-buffer :output-buffer :timeout)]
+  (let [opts (dissoc config :input-buffer :output-buffer :timeout :topic)]
     (cond
       (and kd vd)      (client/consumer opts kd vd)
       :else            (client/consumer opts))))
@@ -40,6 +41,54 @@
   "Rely on the standard transducer but indicate that this is a record."
   (comp client/record-xform
         (map #(assoc % :type :record))))
+
+(defn poller-ctl
+  [ctl out driver listener]
+  (let [payload       (a/<!! ctl)
+        {:keys [op]}  payload
+        topic-offsets (:topic-offsets payload)
+        topic         (or (:topics payload) (:topic payload))]
+
+    (cond
+      (= op :callback)
+      (let [f (:callback payload)]
+        (or (f driver out)
+            (not (:process-result? payload))))
+
+      (= op :stop)
+      (do
+        (a/>!! out {:type :eof})
+        (a/close! ctl)
+        (client/close! driver)
+        (a/close! out)
+        false)
+
+      :else
+      (or
+       (cond
+         (= op :subscribe)
+         (client/subscribe! driver topic listener)
+
+         (= op :unsubscribe)
+         (client/unsubscribe! driver)
+
+         (and (= op :commit) topic-offsets)
+         (client/commit! driver topic-offsets)
+
+         (= op :commit)
+         (client/commit! driver)
+
+         (= op :pause)
+         (client/pause! driver (:topic-partitions payload))
+
+         (= op :resume)
+         (client/resume! driver (:topic-partitions payload))
+
+         (= op :partitions-for)
+         (a/>!! (or (:response payload) out)
+                {:type       :partitions
+                 :partitions (client/partitions-for driver topic)}))
+       true))))
 
 (defn poller-fn
   "Poll for next messages, catching exceptions and yielding them."
@@ -59,51 +108,16 @@
              (a/>!! recs records)
              true)
            (catch org.apache.kafka.common.errors.WakeupException _
-             (let [payload       (a/<!! ctl)
-                   {:keys [op]}  payload
-                   topic-offsets (:topic-offsets payload)
-                   topic         (or (:topics payload) (:topic payload))]
+             (poller-ctl ctl out driver listener))
 
-               (cond
-                 (= op :callback)
-                 (let [f (:callback payload)]
-                   (or (f driver out)
-                       (not (:process-result? payload))))
+           (catch IllegalStateException e
+             (poller-ctl ctl out driver listener)
+             ;;send exception to out
+             (a/put! out
+               {:type :exception
+                :exception e}
+              true))
 
-                 (= op :stop)
-                 (do
-                   (a/>!! out {:type :eof})
-                   (a/close! ctl)
-                   (client/close! driver)
-                   (a/close! out)
-                   false)
-
-                 :else
-                 (or
-                  (cond
-                    (= op :subscribe)
-                    (client/subscribe! driver topic listener)
-
-                    (= op :unsubscribe)
-                    (client/unsubscribe! driver)
-
-                    (and (= op :commit) topic-offsets)
-                    (client/commit! driver topic-offsets)
-
-                    (= op :commit)
-                    (client/commit! driver)
-
-                    (= op :pause)
-                    (client/pause! driver (:topic-partitions payload))
-
-                    (= op :resume)
-                    (client/resume! driver (:topic-partitions payload))
-
-                    (= op :partitions-for)
-                    (a/>!! (or (:response payload) out)
-                           {:type       :partitions
-                            :partitions (client/partitions-for driver topic)}))
-                  true))))
            (catch Exception e
              (a/put! out
                      {:type      :exception
@@ -121,7 +135,7 @@
    - `:input-buffer`: Maximum backlog of control channel messages.
    - `:output-buffer`: Maximum queued consumed messages.
    - `:timeout`: Poll interval
-
+   - `:topic` : Automatically subscribe to this topic before launching loop
 
    The resulting control channel is used to interact with the consumer driver
    and expects map payloads, whose operation is determined by their
@@ -156,12 +170,15 @@
   ([config]
    (consumer config nil nil))
   ([config kd vd]
-   (let [inbuf           (or (:input-buffer config) default-input-buffer)
+   (let [topic           (:topic config)
+         inbuf           (or (:input-buffer config) default-input-buffer)
          outbuf          (or (:output-buffer config) default-output-buffer)
          timeout         (or (:timeout config) default-timeout)
-         driver          (make-consumer config  kd vd)
+         driver          (make-consumer config kd vd)
          gateway         (a/chan inbuf)
          [ctl out next!] (poller-fn driver inbuf outbuf timeout)]
+    (when topic
+      (client/subscribe! driver topic))
      (a/thread
        (.setName (Thread/currentThread) "kafka-consumer-loop")
        (loop [poller (next!)]
