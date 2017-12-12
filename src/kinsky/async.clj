@@ -30,12 +30,21 @@
        (nth indexed idx not-found))
      clojure.lang.ILookup
      (valAt [this key]
+<<<<<<< HEAD
        (.valAt this key nil))
      (valAt [_ key not-found]
        (case key
          [:sink :up]     up
          [:source :down] down
                          not-found)))))
+=======
+       (valAt this key nil))
+     (valAt [_ key not-found]
+       (case key
+         (:sink  :up)    up
+         (:source :down) down
+         not-found)))))
+>>>>>>> master
 
 
 (def default-input-buffer
