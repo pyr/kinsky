@@ -107,7 +107,9 @@
   (seek!           [this] [this topic-partition offset]
     "Overrides the fetch offsets that the consumer will use on the next poll")
   (position!      [this] [this topic-partition]
-    "Get the offset of the next record that will be fetched (if a record with that offset exists)."))
+    "Get the offset of the next record that will be fetched (if a record with that offset exists).")
+  (subscription   [this]
+    "Currently assigned topics"))
 
 (defprotocol ProducerDriver
   "Driver interface for producers"
@@ -319,10 +321,8 @@
        ({:key \"k0\" :offset 1 :partition 0 :topic \"t\" :value \"v0\"}
         {:key \"k1\" :offset 1 :partition 1 :topic \"t\" :value \"v1\"}
         ...)
-"
-  (mapcat (comp (partial mapcat identity)
-                vals
-                :by-partition)))
+  "
+  (comp (map :by-partition) (mapcat vals) cat))
 
 (defn cr->data
   "Yield a clojure representation of a consumer record"
@@ -339,7 +339,7 @@
   (let [->d  (fn [^TopicPartition p] [(.topic p) (.partition p)])
         ps   (.partitions crs)
         ts   (set (for [^TopicPartition p ps] (.topic p)))
-        by-p (into {} (for [^String p ps] [(->d p) (mapv cr->data (.records crs p))]))
+        by-p (into {} (for [^TopicPartition p ps] [(->d p) (mapv cr->data (.records crs p))]))
         by-t (into {} (for [^String t ts] [t (mapv cr->data (.records crs t))]))]
     {:partitions   (vec (for [^TopicPartition p ps] [(.topic p) (.partition p)]))
      :topics       ts
@@ -419,7 +419,9 @@
     (seek! [this topic-partition offset]
         (.seek consumer (->topic-partition topic-partition) offset))
     (position! [this topic-partition]
-        (.position consumer (->topic-partition topic-partition)))
+      (.position consumer (->topic-partition topic-partition)))
+     (subscription [this]
+       (.subscription consumer))
     GenericDriver
     (close! [this]
       (.close consumer))
@@ -473,7 +475,9 @@
     (close! [this]
       (.close producer))
     (close! [this timeout]
-      (.close producer (long timeout) TimeUnit/MILLISECONDS))
+      (if (nil? timeout)
+        (.close timeout)
+        (.close producer (long timeout) TimeUnit/MILLISECONDS)))
     ProducerDriver
     (send! [this record]
       (.send producer (->record record)))

@@ -30,12 +30,12 @@
        (nth indexed idx not-found))
      clojure.lang.ILookup
      (valAt [this key]
-       (valAt this key nil))
+       (.valAt this key nil))
      (valAt [_ key not-found]
        (case key
-         (:sink  :up)    up
-         (:source :down) down
-         not-found)))))
+         [:sink :up]     up
+         [:source :down] down
+                         not-found)))))
 
 
 (def default-input-buffer
@@ -72,90 +72,96 @@
 
 (def record-xform
   "Rely on the standard transducer but indicate that this is a record."
-  (comp client/record-xform
-        (map #(assoc % :type :record))))
+  (comp client/record-xform (map #(assoc % :type :record))))
+
+(defn get-within
+  [ctl tm]
+  (let [max-wait (a/timeout tm)]
+    (a/alt!!
+      max-wait ([_] nil)
+      ctl      ([v] v))))
 
 (defn poller-ctl
-  [ctl out driver listener]
-  (let [payload       (a/<!! ctl)
-        {:keys [op]}  payload
-        topic-offsets (:topic-offsets payload)
-        topic         (or (:topics payload) (:topic payload))]
+  [ctl out driver timeout]
+  (if-let [payload (get-within ctl timeout)]
+    (let [{:keys [op]}  payload
+          topic-offsets (:topic-offsets payload)
+          topic         (or (:topics payload) (:topic payload))]
+      (cond
+        (= op :callback)
+        (let [f (:callback payload)]
+          (or (f driver out)
+              (not (:process-result? payload))))
 
-    (cond
-      (= op :callback)
-      (let [f (:callback payload)]
-        (or (f driver out)
-            (not (:process-result? payload))))
+        (= op :stop)
+        false
 
-      (= op :stop)
-      (do
-        (a/>!! out {:type :eof})
-        (a/close! ctl)
-        (client/close! driver)
-        (a/close! out)
-        false)
+        :else
+        (or
+         (cond
+           (= op :subscribe)
+           (client/subscribe! driver topic (channel-listener out))
 
-      :else
-      (or
-       (cond
-         (= op :subscribe)
-         (client/subscribe! driver topic listener)
+           (= op :unsubscribe)
+           (client/unsubscribe! driver)
 
-         (= op :unsubscribe)
-         (client/unsubscribe! driver)
+           (and (= op :commit) topic-offsets)
+           (client/commit! driver topic-offsets)
 
-         (and (= op :commit) topic-offsets)
-         (client/commit! driver topic-offsets)
+           (= op :commit)
+           (client/commit! driver)
 
-         (= op :commit)
-         (client/commit! driver)
+           (= op :pause)
+           (client/pause! driver (:topic-partitions payload))
 
-         (= op :pause)
-         (client/pause! driver (:topic-partitions payload))
+           (= op :resume)
+           (client/resume! driver (:topic-partitions payload))
 
-         (= op :resume)
-         (client/resume! driver (:topic-partitions payload))
+           (= op :partitions-for)
+           (do
+             (let [parts (client/partitions-for driver topic)]
+               (a/put! (or (:response payload) out)
+                       {:type       :partitions
+                        :partitions parts}))))
+         true)))
+    true))
 
-         (= op :partitions-for)
-         (a/>!! (or (:response payload) out)
-                {:type       :partitions
-                 :partitions (client/partitions-for driver topic)}))
-       true))))
+(defn close-poller
+  [ctl out driver]
+  (a/put! out {:type :eof})
+  (a/close! ctl)
+  (client/close! driver)
+  (a/close! out))
 
-(defn poller-fn
+(defn safe-poll
+  [ctl recs out driver timeout]
+  (try
+    (let [records (client/poll! driver timeout)]
+      (a/>!! recs records)
+      true)
+    (catch org.apache.kafka.common.errors.WakeupException _
+      (poller-ctl ctl out driver timeout))
+    (catch IllegalStateException _
+      (poller-ctl ctl out driver timeout))
+    (catch Exception e
+      (a/put! out {:type :exception :exception e})
+      false)))
+
+(defn poller-thread
   "Poll for next messages, catching exceptions and yielding them."
   [driver inbuf outbuf timeout]
   (let [ctl      (a/chan inbuf)
         out      (a/chan outbuf)
-        recs     (a/chan outbuf record-xform (fn [e] (throw e)))
-        listener (channel-listener out)]
-    (a/pipe recs out false)
-    [ctl
-     out
-     (fn []
-       (a/thread
-         (.setName (Thread/currentThread) "kafka-record-poller")
-         (try
-           (when-let [records (client/poll! driver timeout)]
-             (a/>!! recs records)
-             true)
-           (catch org.apache.kafka.common.errors.WakeupException _
-             (poller-ctl ctl out driver listener))
-
-           (catch IllegalStateException e
-             (poller-ctl ctl out driver listener)
-             ;;send exception to out
-             (a/put! out
-               {:type :exception
-                :exception e}
-              true))
-
-           (catch Exception e
-             (a/put! out
-                     {:type      :exception
-                      :exception e})
-             true))))]))
+        recs     (a/chan outbuf record-xform (fn [e] (throw e)))]
+    (a/pipe recs out)
+    (future
+      (.setName (Thread/currentThread) "kafka-consumer-poller")
+      (loop []
+        (let [recur? (safe-poll ctl recs out driver timeout)]
+          (if recur?
+            (recur)
+            (close-poller ctl out driver)))))
+    [ctl out]))
 
 (defn consumer
   "Build an async consumer. Yields a vector of record and control
@@ -188,6 +194,7 @@
       of 2 arguments, the consumer driver and output channel, on a woken up
       driver.
    - `:stop`: `{:op :stop}` stop and close consumer.
+   - `:duplex?`: yields a duplex channel instead of a vector of two chans
 
 
    The resulting output channel will emit payloads with as maps containing a
@@ -204,26 +211,17 @@
    (consumer config nil nil))
   ([config kd vd]
    (let [topic           (:topic config)
+         duplex? (:duplex? config)
          inbuf           (or (:input-buffer config) default-input-buffer)
          outbuf          (or (:output-buffer config) default-output-buffer)
          timeout         (or (:timeout config) default-timeout)
-         driver          (make-consumer config kd vd)
-         gateway         (a/chan inbuf)
-         [ctl out next!] (poller-fn driver inbuf outbuf timeout)]
-    (when topic
-      (client/subscribe! driver topic))
-     (a/thread
-       (.setName (Thread/currentThread) "kafka-consumer-loop")
-       (loop [poller (next!)]
-         (a/alt!!
-           poller  ([continue?]
-                    (when continue?
-                      (recur (next!))))
-           gateway ([payload]
-                    (a/>!! ctl payload)
-                    (client/wake-up! driver)
-                    (recur poller)))))
-     (duplex gateway out [out gateway]))))
+         driver          (make-consumer (dissoc config :duplex? :topic) kd vd)
+         [ctl out]       (poller-thread driver inbuf outbuf timeout)]
+     (when topic
+       (client/subscribe! driver topic))
+     (if duplex?
+       (duplex ctl out [out ctl])
+       [out ctl]))))
 
 (defn make-producer
   "Build a producer, with or without serializers"
@@ -274,36 +272,26 @@
          outbuf  (or (:output-buffer config) default-output-buffer)
          opts    (dissoc config :input-buffer :output-buffer)
          driver  (make-producer opts ks vs)
-         in      (a/chan inbuf)
-         out     (a/chan outbuf)]
-     (a/go-loop []
-       (let [{:keys [op timeout callback response topic]
-              :as   record}
-             (a/<! in)]
-         (try
-           (cond
-             (= op :close)
-             (do (if timeout
-                   (client/close! driver timeout)
-                   (client/close! driver))
-                 (a/>! out {:type :eof})
-                 (a/close! out))
+         in      (a/chan inbuf)]
+     (future
+       (loop [{:keys [op timeout callback response topic] :as record} (a/<!! in)]
+         (cond
+           (= op :close)
+           (client/close! driver timeout)
 
-             (= op :flush)
-             (client/flush! driver)
+           (= op :flush)
+           (client/flush! driver)
 
-             (= op :callback)
-             (callback driver)
+           (= op :callback)
+           (callback driver)
 
-             (= op :partitions-for)
-             (a/>! (or response out)
-                   {:type       :partitions
-                    :partitions (client/partitions-for driver (name topic))})
+           (= op :partitions-for)
+           (when response
+             (a/put! response
+                     {:type       :partitions
+                      :partitions (client/partitions-for driver (name topic))}))
 
-             :else
-             (client/send! driver (dissoc record :op)))
-           (catch Exception e
-             (a/>! out {:type :exception :exception e})))
-         (when (not= type :close)
-           (recur))))
-     (duplex in out))))
+           :else
+           (client/send! driver (dissoc record :op)))
+         (recur (a/<!! in))))
+     in)))
