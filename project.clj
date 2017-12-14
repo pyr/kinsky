@@ -1,4 +1,4 @@
-(defproject spootnik/kinsky "0.1.20"
+(defproject spootnik/kinsky "0.1.21-SNAPSHOT"
   :description "Kafka clojure client library"
   :plugins [[lein-codox "0.9.1"]
             [lein-ancient "0.6.14"]]
