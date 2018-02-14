@@ -18,7 +18,7 @@ Kinsky provides the following:
 ## Usage
 
 ```clojure
-   [[spootnik/kinsky "0.1.16"]]
+   [[spootnik/kinsky "0.1.21"]]
 ```
 
 ## Documentation
@@ -26,6 +26,11 @@ Kinsky provides the following:
 * [API Documentation](http://pyr.github.io/kinsky)
 
 ## Changelog
+
+### 0.1.21
+
+- Update to latest Kafka clients
+- Provide duplex channels to bridge control and record channels in consumers
 
 ### 0.1.16
 

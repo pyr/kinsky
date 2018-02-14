@@ -1,4 +1,4 @@
-(defproject spootnik/kinsky "0.1.21"
+(defproject spootnik/kinsky "0.1.22-SNAPSHOT"
   :description "Kafka clojure client library"
   :plugins [[lein-codox "0.9.1"]
             [lein-ancient "0.6.14"]]
@@ -8,7 +8,7 @@
   :codox {:source-uri "https://github.com/pyr/kinsky/blob/{version}/{filepath}#L{line}"
           :metadata   {:doc/format :markdown}}
   :dependencies [[org.clojure/clojure            "1.9.0"]
-                 [org.clojure/core.async         "0.3.465"]
+                 [org.clojure/core.async         "0.4.474"]
                  [org.apache.kafka/kafka-clients "1.0.0"]
                  [cheshire                       "5.8.0"]]
   :test-selectors {:default     (complement :integration)
