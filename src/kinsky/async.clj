@@ -86,6 +86,7 @@
     (let [{:keys [op]}  payload
           topic-offsets (:topic-offsets payload)
           topic         (or (:topics payload) (:topic payload))]
+      (client/wake-up! driver)
       (cond
         (= op :callback)
         (let [f (:callback payload)]
