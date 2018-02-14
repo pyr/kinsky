@@ -150,13 +150,24 @@
   "Poll for next messages, catching exceptions and yielding them."
   [driver inbuf outbuf timeout]
   (let [ctl      (a/chan inbuf)
+        mult     (a/mult ctl)
+        c1       (a/chan inbuf)
+        c2       (a/chan inbuf)
         out      (a/chan outbuf)
         recs     (a/chan outbuf record-xform (fn [e] (throw e)))]
+    (a/tap mult c1)
+    (a/tap mult c2)
     (a/pipe recs out)
+    (future
+      (.setName (Thread/currentThread) "kafka-control-poller")
+      (loop []
+        (when-let [cr (a/<!! c2)]
+          (client/wake-up! driver)
+          (recur))))
     (future
       (.setName (Thread/currentThread) "kafka-consumer-poller")
       (loop []
-        (let [recur? (safe-poll ctl recs out driver timeout)]
+        (let [recur? (safe-poll c1 recs out driver timeout)]
           (if recur?
             (recur)
             (close-poller ctl out driver)))))
