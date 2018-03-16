@@ -10,7 +10,9 @@
            clojure.lang.IDeref))
 
 (defprotocol AdminClientDriver
-  "Driver interface for admin clients"
+  "Driver protocol for admin clients"
+  (close!         [this] [this timeout]
+    "Close this driver")
   (list-topics  [this list-internal?]
     "List all available topics. When `list-internal?` is `true` the list of
      internal topics (`__consumer_offsets`) is also returned."))
@@ -55,32 +57,25 @@
   {:name      (.name listing)
    :internal? (.isInternal listing)})
 
-(defn admin-client->driver
-  [^AdminClient client]
-  (reify
-    GenericDriver
-    (close! [this]
-      (.close client))
-    (close! [this timeout]
-      (.close client (long timeout) TimeUnit/MILLISECONDS))
+(extend-type AdminClient
+  AdminClientDriver
 
-    AdminClientDriver
-    (list-topics [this list-internal?]
-      (let [opts (doto (ListTopicsOptions.)
-                   (.listInternal list-internal?))]
-        (prn (.shouldListInternal opts))
-        (-> (.listTopics client opts)
-            .listings
-            (kafka-future->wrapper #(map topic-listing->data %)))))
+  (close! [this]
+    (.close this))
+  (close! [this timeout]
+    (.close this (long timeout) TimeUnit/MILLISECONDS))
 
-    IDeref
-    (deref [this]
-      client)))
+  (list-topics [this list-internal?]
+    (let [opts (doto (ListTopicsOptions.)
+                 (.listInternal list-internal?))]
+      (-> (.listTopics this opts)
+          .listings
+          (kafka-future->wrapper #(map topic-listing->data %))))))
 
 (defn client
   "Create an AdminClient from a configuration map."
   [config]
-  (admin-client->driver (AdminClient/create (opts->props config))))
+  (AdminClient/create (opts->props config)))
 
 ;; (def c (client {"bootstrap.servers" "localhost:9092"}))
 
