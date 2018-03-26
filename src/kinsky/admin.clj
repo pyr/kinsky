@@ -3,7 +3,7 @@
   (:require [kinsky.client :refer (GenericDriver opts->props)]
             [clojure.core.async :as a])
   (:import (org.apache.kafka.clients.admin AdminClient ListTopicsOptions
-                                           TopicListing)
+                                           TopicListing NewTopic)
            java.util.concurrent.TimeUnit
            org.apache.kafka.common.KafkaFuture
            org.apache.kafka.common.KafkaFuture$Function
@@ -15,7 +15,8 @@
     "Close this driver")
   (list-topics  [this list-internal?]
     "List all available topics. When `list-internal?` is `true` the list of
-     internal topics (`__consumer_offsets`) is also returned."))
+     internal topics (`__consumer_offsets`) is also returned.")
+  (create-topic [this topic-name topic-options]))
 
 (defprotocol KafkaFutureWrapper
   "Small wrapper for `KafkaFuture` instances."
@@ -70,7 +71,22 @@
                  (.listInternal list-internal?))]
       (-> (.listTopics this opts)
           .listings
-          (kafka-future->wrapper #(map topic-listing->data %))))))
+          (kafka-future->wrapper #(map topic-listing->data %)))))
+
+  (create-topic
+    [this
+     topic-name
+     {:keys [replication-factor
+             partitions
+             config]
+      :or   {partitions         1
+             replication-factor 1}}]
+    (let [topic (NewTopic. topic-name partitions replication-factor)]
+      (when config
+        (.configs topic (opts->props config)))
+      (-> (.createTopics this (list topic))
+          .all
+          (kafka-future->wrapper #(when (nil? %) true))))))
 
 (defn client
   "Create an AdminClient from a configuration map."
@@ -80,3 +96,5 @@
 ;; (def c (client {"bootstrap.servers" "localhost:9092"}))
 
 ;; @(list-topics c true)
+
+;; @(create-topic c "my-topic" {:partitions 2 :replication-factor 1 :config {:cleanup.policy "compact"}})
