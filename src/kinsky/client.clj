@@ -172,11 +172,16 @@
 
 (defn edn-deserializer
   "Deserialize EDN."
-  []
-  (deserializer
-   (fn [_ #^"[B" payload]
-     (when payload
-       (edn/read-string (String. payload "UTF-8"))))))
+  ([]
+   (deserializer
+    (fn [_ #^"[B" payload]
+      (when payload
+        (edn/read-string (String. payload "UTF-8"))))))
+  ([reader-opts]
+   (deserializer
+    (fn [_ #^"[B" payload]
+      (when payload
+        (edn/read-string reader-opts (String. payload "UTF-8")))))))
 
 (defn json-deserializer
   "Deserialize JSON."
