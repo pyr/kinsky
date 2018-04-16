@@ -18,7 +18,7 @@ Kinsky provides the following:
 ## Usage
 
 ```clojure
-   [[spootnik/kinsky "0.1.21"]]
+   [[spootnik/kinsky "0.1.22"]]
 ```
 
 ## Documentation
@@ -26,6 +26,11 @@ Kinsky provides the following:
 * [API Documentation](http://pyr.github.io/kinsky)
 
 ## Changelog
+
+### 0.1.22
+
+- Update to latest Kafka clients
+- Typo fix
 
 ### 0.1.21
 
