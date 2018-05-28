@@ -185,6 +185,7 @@
    - `:output-buffer`: Maximum queued consumed messages.
    - `:timeout`: Poll interval
    - `:topic` : Automatically subscribe to this topic before launching loop
+   - `:duplex?`: yields a duplex channel instead of a vector of two chans
 
    The resulting control channel is used to interact with the consumer driver
    and expects map payloads, whose operation is determined by their
@@ -204,7 +205,6 @@
       of 2 arguments, the consumer driver and output channel, on a woken up
       driver.
    - `:stop`: `{:op :stop}` stop and close consumer.
-   - `:duplex?`: yields a duplex channel instead of a vector of two chans
 
 
    The resulting output channel will emit payloads with as maps containing a
@@ -221,7 +221,7 @@
    (consumer config nil nil))
   ([config kd vd]
    (let [topic           (:topic config)
-         duplex? (:duplex? config)
+         duplex?         (:duplex? config)
          inbuf           (or (:input-buffer config) default-input-buffer)
          outbuf          (or (:output-buffer config) default-output-buffer)
          timeout         (or (:timeout config) default-timeout)
