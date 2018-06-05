@@ -49,7 +49,7 @@ The examples assume the following require forms:
 ```clojure
 (:require [kinsky.client      :as client]
           [kinsky.async       :as async]
-          [clojure.core.async :refer [go <! >!]])
+          [clojure.core.async :as a :refer [go <! >!]])
 ```
 
 ### Production
