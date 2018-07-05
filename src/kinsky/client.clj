@@ -330,6 +330,7 @@
   {:key       (.key cr)
    :offset    (.offset cr)
    :partition (.partition cr)
+   :timestamp (.timestamp cr)
    :topic     (.topic cr)
    :value     (.value cr)})
 
