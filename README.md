@@ -54,6 +54,7 @@ Thanks a lot to these awesome contributors
 
 - Removal of the asynchronous façade, transducers should suffice
 - Producer: added send-cb! function that takes a callback fn
+- Consumer: added seek-beginning! and seek-end!
 - Minor typo and code refactoring
 
 ### 0.1.24
