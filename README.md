@@ -53,6 +53,7 @@ Thanks a lot to these awesome contributors
 ### 0.1.25
 
 - Removal of the asynchronous façade, transducers should suffice
+- Producer: added send-cb! function that takes a callback fn
 - Minor typo and code refactoring
 
 ### 0.1.24
