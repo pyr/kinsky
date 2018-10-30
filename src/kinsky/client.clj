@@ -89,9 +89,9 @@
     "Subscribe to a topic or list of topics.
      The topics argument can be:
 
-     - A simple string when subscribing to a single topic
+     - A simple string or keyword when subscribing to a single topic
      - A regex pattern to subscribe to matching topics
-     - A sequence of strings
+     - A collection of strings or keywords
 
      The optional listener argument is either a callback
      function or an implementation of
@@ -417,9 +417,17 @@
      :by-partition (group-by (juxt :topic :partition) edc)}))
 
 (defn ->topics
-  "Yield a valid object for subscription"
+  "Yield a valid topic object for subscription given a string, keyword,
+  regex pattern or collection of strings or keywords."
   ^Collection
   [topics]
+  (assert (or (string? topics)
+              (keyword? topics)
+              (instance? Pattern topics)
+              (and (instance? Collection topics)
+                   (every? (some-fn string? keyword?) topics)))
+          (str "topics argument must be a string, keyword, regex pattern or "
+               "collection of strings or keywords, received " topics))
   (cond
     (keyword? topics)             [(name topics)]
     (string? topics)              [topics]
@@ -428,8 +436,8 @@
     :else (throw (ex-info "topics argument is invalid" {:topics topics}))))
 
 (defn consumer->driver
-  "Given a consumer-driver and an optional callback to callback
-   to call when stopping, yield a consumer driver.
+  "Given a KafkaConsumer and an optional callback to call when stopping,
+   yield a consumer driver.
 
    The consumer driver implements the following protocols:
 
@@ -466,22 +474,8 @@
        (.resume consumer
                 (map ->topic-partition topic-partitions)))
      (subscribe! [this topics]
-       (assert (or (string? topics)
-                   (keyword? topics)
-                   (instance? Pattern topics)
-                   (and (instance? Collection topics)
-                        (every? (some-fn string? keyword?) topics)))
-               (str "topic argument must be a string, keyword, regex pattern or "
-                    "collection of strings or keywords."))
        (.subscribe consumer (->topics topics)))
      (subscribe! [this topics listener]
-       (assert (or (string? topics)
-                   (keyword? topics)
-                   (instance? Pattern topics)
-                   (and (instance? Collection topics)
-                        (every? (some-fn string? keyword?) topics)))
-               (str "topic argument must be a string, keyword, regex pattern or "
-                    "collection of strings or keywords."))
        (.subscribe consumer (->topics topics) (rebalance-listener listener)))
      (unsubscribe! [this]
        (.unsubscribe consumer))
@@ -494,17 +488,17 @@
                           (map (juxt ->topic-partition ->offset-metadata))
                           (reduce merge {}))]
          (.commitSync consumer ^Map offsets)))
-    (seek! [this topic-partition offset]
-      (.seek consumer
-             (->topic-partition topic-partition)
-             (long offset)))
-    (position! [this topic-partition]
-      (.position consumer (->topic-partition topic-partition)))
+     (seek! [this topic-partition offset]
+       (.seek consumer
+              (->topic-partition topic-partition)
+              (long offset)))
+     (position! [this topic-partition]
+       (.position consumer (->topic-partition topic-partition)))
      (subscription [this]
        (.subscription consumer))
-    GenericDriver
-    (close! [this]
-      (.close consumer))
+     GenericDriver
+     (close! [this]
+       (.close consumer))
      MetadataDriver
      (partitions-for [this topic]
        (mapv partition-info->data (.partitionsFor consumer topic)))
@@ -537,8 +531,9 @@
   (map ->header headers))
 
 (defn ->record
-  "Build a producer record from a clojure map. Leave ProducerRecord instances
-   untouched."
+  "Build a ProducerRecord from a clojure map.
+   Leave ProducerRecord instances untouched."
+  ^ProducerRecord
   [payload]
   (if (instance? ProducerRecord payload)
     payload
@@ -580,7 +575,6 @@
     (send! [this topic k v]
       (.send producer (->record {:key k :value v :topic topic})))
     (send! [this topic k v headers]
-      "Defaults partition and timestamp to 0, if you need to set either, use the single arity version"
       (.send producer (->record {:key k :value v :topic topic :headers headers})))
     (flush! [this]
       (.flush producer))

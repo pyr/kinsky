@@ -14,6 +14,9 @@ Kinsky provides the following:
   **JSON**, **EDN** and a **keyword** serializer for keys.
 - Documentation
 
+The `core.async` facade that used to be part of this project is now
+[a separate project](https://github.com/fmjrey/kinsky-async).
+
 ## Usage
 
 ```clojure
@@ -50,6 +53,7 @@ Thanks a lot to these awesome contributors
 ### 0.1.25
 
 - Removal of the asynchronous façade, transducers should suffice
+- Minor typo and code refactoring
 
 ### 0.1.24
 
