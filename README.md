@@ -29,7 +29,7 @@ Kinsky provides the following:
 
 ### 0.1.23
 
-- 
+- Fixed ConcurrentModificationException when async consumer created with topic
 
 ### 0.1.22
 
