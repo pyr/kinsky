@@ -30,6 +30,8 @@ Kinsky provides the following:
 ### 0.1.23
 
 - Fixed ConcurrentModificationException when async consumer created with topic
+- Added support for reader opts when consuming
+- Add timestamp in record output
 
 ### 0.1.22
 
