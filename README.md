@@ -27,6 +27,10 @@ Kinsky provides the following:
 
 ## Changelog
 
+### 0.1.23
+
+- Fixed ConcurrentModificationException when async consumer created with topic
+
 ### 0.1.22
 
 - Update to latest Kafka clients

@@ -4,7 +4,8 @@
   (:require [clojure.core.async :as a]
             [clojure.core.async.impl.protocols :as impl]
             [kinsky.client      :as client])
-  (:import [java.lang IllegalStateException]))
+  (:import [java.lang IllegalStateException]
+           [java.util ConcurrentModificationException]))
 
 (defn duplex
   ([up down] (duplex up down [up down]))
@@ -142,6 +143,9 @@
       (poller-ctl ctl out driver timeout))
     (catch IllegalStateException _
       (poller-ctl ctl out driver timeout))
+    (catch ConcurrentModificationException e
+      ;; Cannot happen unless there is a bug, so don't hide it
+      (throw e))
     (catch Exception e
       (a/put! out {:type :exception :exception e})
       false)))
@@ -220,15 +224,15 @@
   ([config]
    (consumer config nil nil))
   ([config kd vd]
-   (let [topic           (:topic config)
-         duplex?         (:duplex? config)
-         inbuf           (or (:input-buffer config) default-input-buffer)
-         outbuf          (or (:output-buffer config) default-output-buffer)
-         timeout         (or (:timeout config) default-timeout)
-         driver          (make-consumer (dissoc config :duplex? :topic) kd vd)
-         [ctl out]       (poller-thread driver inbuf outbuf timeout)]
+   (let [topic     (:topic config)
+         duplex?   (:duplex? config)
+         inbuf     (or (:input-buffer config) default-input-buffer)
+         outbuf    (or (:output-buffer config) default-output-buffer)
+         timeout   (or (:timeout config) default-timeout)
+         driver    (make-consumer (dissoc config :duplex? :topic) kd vd)
+         [ctl out] (poller-thread driver inbuf outbuf timeout)]
      (when topic
-       (client/subscribe! driver topic))
+       (a/put! ctl {:op :subscribe :topic topic})) ;; use poller thread!
      (if duplex?
        (duplex ctl out [out ctl])
        [out ctl]))))
