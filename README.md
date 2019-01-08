@@ -25,6 +25,26 @@ Kinsky provides the following:
 
 * [API Documentation](http://pyr.github.io/kinsky)
 
+## Contributors
+
+Thanks a lot to these awesome contributors
+
+- Ray Cheung (@raycheung)
+- Daniel Truemper (@truemped)
+- Mathieu Marchandise (@vielmath)
+- Eli Sorey (@esorey)
+- François Rey (@fmjrey)
+- Karthikeyan Chinnakonda (@codingkarthik)
+- Jean-Baptiste Besselat (@luhhujbb)
+- Carl Düvel (@hackbert)
+- Andrew Garman (@agarman)
+- Pyry Kovanen (@pkova)
+- Henrik Lundahl (@henriklundahl)
+- Josh Glover (@jmglov)
+- Marcus Spiegel (@malesch)
+- Jeff Stokes (@jstokes)
+- Martino (@vise890-ovo)
+
 ## Changelog
 
 ### 0.1.23
