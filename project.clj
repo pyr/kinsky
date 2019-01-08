@@ -7,10 +7,10 @@
             :url  "https://github.com/pyr/kinsky/tree/master/LICENSE"}
   :codox {:source-uri "https://github.com/pyr/kinsky/blob/{version}/{filepath}#L{line}"
           :metadata   {:doc/format :markdown}}
-  :dependencies [[org.clojure/clojure            "1.9.0"]
-                 [org.clojure/core.async         "0.4.474"]
-                 [org.apache.kafka/kafka-clients "1.1.0"]
-                 [cheshire                       "5.8.0"]]
+  :dependencies [[org.clojure/clojure            "1.10.0"]
+                 [org.clojure/core.async         "0.4.490"]
+                 [org.apache.kafka/kafka-clients "2.1.0"]
+                 [cheshire                       "5.8.1"]]
   :test-selectors {:default     (complement :integration)
                    :integration :integration
                    :all         (constantly true)}
