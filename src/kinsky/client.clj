@@ -120,7 +120,10 @@
      `:key`, `:topic`, `:partition`, and `:value`.
      ")
   (flush!         [this]
-    "Ensure that produced messages are flushed."))
+    "Ensure that produced messages are flushed.")
+  (init-transactions! [this])
+  (begin-transaction! [this])
+  (commit-transaction! [this]))
 
 (defprotocol GenericDriver
   (close!         [this] [this timeout]
@@ -491,6 +494,12 @@
       (.send producer (->record {:key k :value v :topic topic})))
     (flush! [this]
       (.flush producer))
+    (init-transactions! [this]
+      (.initTransactions producer))
+    (begin-transaction! [this]
+      (.beginTransaction producer))
+    (commit-transaction! [this]
+      (.commitTransaction producer))
     MetadataDriver
     (partitions-for [this topic]
       (mapv partition-info->data (.partitionsFor producer topic)))
