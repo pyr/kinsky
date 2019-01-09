@@ -120,7 +120,10 @@
      `:key`, `:topic`, `:partition`, and `:value`.
      ")
   (flush!         [this]
-    "Ensure that produced messages are flushed."))
+    "Ensure that produced messages are flushed.")
+  (init-transactions! [this])
+  (begin-transaction! [this])
+  (commit-transaction! [this]))
 
 (defprotocol GenericDriver
   (close!         [this] [this timeout]
@@ -172,16 +175,11 @@
 
 (defn edn-deserializer
   "Deserialize EDN."
-  ([]
-   (deserializer
-    (fn [_ #^"[B" payload]
-      (when payload
-        (edn/read-string (String. payload "UTF-8"))))))
-  ([reader-opts]
-   (deserializer
-    (fn [_ #^"[B" payload]
-      (when payload
-        (edn/read-string reader-opts (String. payload "UTF-8")))))))
+  []
+  (deserializer
+   (fn [_ #^"[B" payload]
+     (when payload
+       (edn/read-string (String. payload "UTF-8"))))))
 
 (defn json-deserializer
   "Deserialize JSON."
@@ -335,7 +333,6 @@
   {:key       (.key cr)
    :offset    (.offset cr)
    :partition (.partition cr)
-   :timestamp (.timestamp cr)
    :topic     (.topic cr)
    :value     (.value cr)})
 
@@ -491,6 +488,12 @@
       (.send producer (->record {:key k :value v :topic topic})))
     (flush! [this]
       (.flush producer))
+    (init-transactions! [this]
+      (.initTransactions producer))
+    (begin-transaction! [this]
+      (.beginTransaction producer))
+    (commit-transaction! [this]
+      (.commitTransaction producer))
     MetadataDriver
     (partitions-for [this topic]
       (mapv partition-info->data (.partitionsFor producer topic)))
