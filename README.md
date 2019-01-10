@@ -44,8 +44,13 @@ Thanks a lot to these awesome contributors
 - Marcus Spiegel (@malesch)
 - Jeff Stokes (@jstokes)
 - Martino (@vise890-ovo)
+- Ikuru K (@iku000888)
 
 ## Changelog
+
+### 0.1.24
+
+- Add support for producer transaction
 
 ### 0.1.23
 
