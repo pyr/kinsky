@@ -50,21 +50,25 @@
           :by-partition {[\"t\" 0] [{:key       \"k0\"
                                      :offset    1
                                      :partition 0
+                                     :timestamp 1233524522
                                      :topic     \"t\"
                                      :value     \"v0\"}]
                          [\"t\" 1] [{:key       \"k1\"
                                      :offset    1
                                      :partition 1
+                                     :timestamp 1233524527
                                      :topic     \"t\"
                                      :value     \"v1\"}]}
           :by-topic      {\"t\" [{:key       \"k0\"
                                   :offset    1
                                   :partition 0
+                                  :timestamp 1233524522
                                   :topic     \"t\"
                                   :value     \"v0\"}
                                  {:key       \"k1\"
                                   :offset    1
                                   :partition 1
+                                  :timestamp 1233524527
                                   :topic     \"t\"
                                   :value     \"v1\"}]}}")
   (stop!          [this] [this timeout]
