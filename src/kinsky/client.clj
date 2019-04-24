@@ -198,6 +198,18 @@
      (when payload
        (json/parse-string (String. payload "UTF-8") true)))))
 
+(defn json-deserializer-lac
+  "Deserialize JSON, on error, log and continue."
+  []
+  (deserializer
+   (fn [_ #^"[B" payload]
+     (when payload
+       (try
+         (json/parse-string (String. payload "UTF-8") true)
+         (catch Exception e
+           (println "JSON parse exception")
+           {:error "Bad Message Detected" :message (String. payload "UTF-8")}))))))
+
 (defn keyword-deserializer
   "Deserialize a string and then keywordize it."
   []
