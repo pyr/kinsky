@@ -41,6 +41,7 @@
     (is (= {:a "b" :c "d"}
            (.deserialize (client/json-deserializer) ""
                          (.getBytes "{\"a\": \"b\", \"c\": \"d\"}")))))
+
   (testing "json deserializer, log and continue on error"
     (is (= {:error "Bad Message Detected" :message "F00"}
            (.deserialize (client/json-deserializer-lac) ""

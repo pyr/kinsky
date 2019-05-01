@@ -2,7 +2,8 @@
   "Small clojure shim on top of the Kafka client API
    See https://github.com/pyr/kinsky for example usage."
   (:require [clojure.edn           :as edn]
-            [cheshire.core         :as json])
+            [cheshire.core         :as json]
+            [clojure.tools.logging :as log])
   (:import java.util.Collection
            java.util.Map
            java.util.concurrent.TimeUnit
@@ -207,7 +208,7 @@
        (try
          (json/parse-string (String. payload "UTF-8") true)
          (catch Exception e
-           (println "JSON parse exception")
+           (log/error e  "JSON parse exception")
            {:error "Bad Message Detected" :message (String. payload "UTF-8")}))))))
 
 (defn keyword-deserializer

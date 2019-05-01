@@ -10,7 +10,8 @@
   :dependencies [[org.clojure/clojure            "1.10.0"]
                  [org.clojure/core.async         "0.4.490"]
                  [org.apache.kafka/kafka-clients "2.1.0"]
-                 [cheshire                       "5.8.1"]]
+                 [cheshire                       "5.8.1"]
+                 [org.clojure/tools.logging      "0.4.1"]]
   :test-selectors {:default     (complement :integration)
                    :integration :integration
                    :all         (constantly true)}
