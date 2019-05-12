@@ -209,7 +209,7 @@
          (json/parse-string (String. payload "UTF-8") true)
          (catch Exception e
            (log/error e  "JSON parse exception")
-           {:error "Bad Message Detected" :message (String. payload "UTF-8")}))))))
+           {:json-deserializer-error "Bad Message Detected" :message (String. payload "UTF-8")}))))))
 
 (defn keyword-deserializer
   "Deserialize a string and then keywordize it."
