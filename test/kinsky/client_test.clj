@@ -1,6 +1,32 @@
 (ns kinsky.client-test
-  (:require [clojure.test  :refer :all]
-            [kinsky.client :as client]))
+  (:require [clojure.test  :refer :all :as t]
+            [clojure.pprint :as pp]
+            [kinsky.client :as client]
+            [kinsky.embedded :as e]))
+
+(def host "localhost")
+(def kafka-port 9093)
+(def zk-port 2183)
+(def bootstrap-servers (format "%s:%s" host kafka-port))
+
+(t/use-fixtures
+  :once (fn [f]
+          (let [z-dir (e/create-tmp-dir "zookeeper-data-dir")
+                k-dir (e/create-tmp-dir "kafka-log-dir")]
+            (try
+              (with-open [k (e/start-embedded-kafka
+                             {::e/host host
+                              ::e/kafka-port kafka-port
+                              ::e/zk-port zk-port
+                              ::e/zookeeper-data-dir (str z-dir)
+                              ::e/kafka-log-dir (str k-dir)
+                              ::e/broker-config {"auto.create.topics.enable" "true"}})]
+                (f))
+              (catch Throwable t
+                (throw t))
+              (finally
+                (e/delete-dir z-dir)
+                (e/delete-dir k-dir))))))
 
 (deftest serializer
   (testing "string serializer"
@@ -75,15 +101,48 @@
 
 (deftest ^:integration producer
   (testing "flush"
-    (let [producer (client/producer {:bootstrap.servers "localhost:9092"} :string :string)]
+    (let [producer (client/producer {:bootstrap.servers bootstrap-servers}
+                                    :string :string)]
       (client/flush! producer))))
 
 (deftest ^:integration consumer
   (testing "stop"
-    (let [consumer (client/consumer {:bootstrap.servers "localhost:9092"} :string :string)]
+    (let [consumer (client/consumer {:bootstrap.servers bootstrap-servers}
+                                    :string :string)]
       (client/stop! consumer))))
 
-(deftest ^:integration topics
+(deftest topics
   (testing "collection of keywords"
-    (let [consumer (client/consumer {:bootstrap.servers "localhost:9092"} :string :string)]
+    (let [consumer (client/consumer {:bootstrap.servers bootstrap-servers
+                                     :group.id "consumer-group-id"}
+                                    :string :string)]
       (client/subscribe! consumer [:x :y :z]))))
+
+(deftest roundtrip
+  (testing "msg roundtrip"
+    (let [t "account"
+          p (client/producer {:bootstrap.servers bootstrap-servers}
+                             (client/keyword-serializer)
+                             (client/edn-serializer))
+          c (client/consumer {:bootstrap.servers bootstrap-servers
+                              :group.id "consumer-group-id"
+                              "enable.auto.commit" "false"
+                              "auto.offset.reset" "earliest"
+                              "isolation.level" "read_committed"}
+                             (client/keyword-deserializer)
+                             (client/edn-deserializer))
+          msgs {:account-a {:action :login}
+                :account-b {:action :logout}
+                :account-c {:action :register}}]
+
+      (client/subscribe! c t)
+
+      (doseq [[k v] msgs]
+        @(client/send! p t k v))
+
+      (is (= (->> (client/poll! c 5000)
+                  :by-topic
+                  vals
+                  (apply concat)
+                  (map :value))
+           (vals msgs))))))
