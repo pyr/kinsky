@@ -1,6 +1,5 @@
 (ns kinsky.client-test
   (:require [clojure.test  :refer :all :as t]
-            [clojure.pprint :as pp]
             [kinsky.client :as client]
             [kinsky.embedded :as e]))
 
@@ -119,30 +118,47 @@
       (client/subscribe! consumer [:x :y :z]))))
 
 (deftest roundtrip
-  (testing "msg roundtrip"
+
     (let [t "account"
           p (client/producer {:bootstrap.servers bootstrap-servers}
                              (client/keyword-serializer)
                              (client/edn-serializer))
-          c (client/consumer {:bootstrap.servers bootstrap-servers
-                              :group.id "consumer-group-id"
-                              "enable.auto.commit" "false"
-                              "auto.offset.reset" "earliest"
-                              "isolation.level" "read_committed"}
-                             (client/keyword-deserializer)
-                             (client/edn-deserializer))
           msgs {:account-a {:action :login}
                 :account-b {:action :logout}
                 :account-c {:action :register}}]
-
-      (client/subscribe! c t)
-
+      ;; feed some data
       (doseq [[k v] msgs]
         @(client/send! p t k v))
 
-      (is (= (->> (client/poll! c 5000)
-                  :by-topic
-                  vals
-                  (apply concat)
-                  (map :value))
-           (vals msgs))))))
+      (testing "msg roundtrip"
+        (let [c (client/consumer {:bootstrap.servers bootstrap-servers
+                                  :group.id "consumer-group-id-1"
+                                  "enable.auto.commit" "false"
+                                  "auto.offset.reset" "earliest"
+                                  "isolation.level" "read_committed"}
+                                 (client/keyword-deserializer)
+                                 (client/edn-deserializer))]
+          (client/subscribe! c t)
+          (is (= (->> (client/poll! c 5000)
+                      :by-topic
+                      vals
+                      (apply concat)
+                      (map :value))
+                 (vals msgs)))))
+
+      (testing "msg roundtrip with custom record consumer fn eduction"
+        (let [c (client/consumer {:bootstrap.servers bootstrap-servers
+                                  :group.id "consumer-group-id-2"
+                                  "enable.auto.commit" "false"
+                                  "auto.offset.reset" "earliest"
+                                  "isolation.level" "read_committed"
+                                  ::client/consumer-decoder-fn client/crs->eduction}
+                                 (client/keyword-deserializer)
+                                 (client/edn-deserializer))]
+          (client/subscribe! c t)
+          (is (= (->> (client/poll! c 5000)
+                      ;; reduce over the ConsumerRecords and only
+                      ;; return the :value without creating
+                      ;; intermediary Seq(s)
+                      (into [] (map :value)))
+                 (vals msgs)))))))
