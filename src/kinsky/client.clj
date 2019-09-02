@@ -226,7 +226,7 @@
     (keyword? x) (if-let [f (deserializers x)]
                    (f)
                    (throw (ex-info "unknown deserializer alias" {})))
-    (ifn? x)     (x)
+    (fn? x)     (x)
     :else        x))
 
 (defn ^Serializer ->serializer
@@ -235,7 +235,7 @@
     (keyword? x) (if-let [f (serializers x)]
                    (f)
                    (throw (ex-info "unknown serializer alias" {})))
-    (ifn? x)     (x)
+    (fn? x)     (x)
     :else        x))
 
 (defn ^Map opts->props
@@ -421,7 +421,7 @@
      (stop! [this]
        (stop! this 0))
      (stop! [this timeout]
-       (when (ifn? run-signal)
+       (when (fn? run-signal)
          (run-signal))
        (.wakeup consumer))
      (pause! [this topic-partitions]
