@@ -21,7 +21,8 @@
            org.apache.kafka.common.serialization.Deserializer
            org.apache.kafka.common.serialization.Serializer
            org.apache.kafka.common.serialization.StringDeserializer
-           org.apache.kafka.common.serialization.StringSerializer))
+           org.apache.kafka.common.serialization.StringSerializer
+           (org.apache.kafka.common.header Header Headers)))
 
 (defprotocol MetadataDriver
   "Common properties for all drivers"
@@ -52,25 +53,29 @@
                                      :partition 0
                                      :timestamp 1233524522
                                      :topic     \"t\"
-                                     :value     \"v0\"}]
+                                     :value     \"v0\"
+                                     :headers   {:h1 [\"1\" \"2\"]}}]
                          [\"t\" 1] [{:key       \"k1\"
                                      :offset    1
                                      :partition 1
                                      :timestamp 1233524527
                                      :topic     \"t\"
-                                     :value     \"v1\"}]}
+                                     :value     \"v1\"}
+                                     :headers   {:h1 [\"1\"]}]}
           :by-topic      {\"t\" [{:key       \"k0\"
                                   :offset    1
                                   :partition 0
                                   :timestamp 1233524522
                                   :topic     \"t\"
-                                  :value     \"v0\"}
+                                  :value     \"v0\"
+                                  :headers   {:h1 [\"1\" \"2\"]}}
                                  {:key       \"k1\"
                                   :offset    1
                                   :partition 1
                                   :timestamp 1233524527
                                   :topic     \"t\"
-                                  :value     \"v1\"}]}}")
+                                  :value     \"v1\"
+                                  :headers   {:h1 [\"1\"]}}]}}")
   (stop!          [this] [this timeout]
     "Stop consumption.")
   (pause!         [this] [this topic-partitions]
@@ -117,11 +122,11 @@
 
 (defprotocol ProducerDriver
   "Driver interface for producers"
-  (send!          [this record] [this topic k v]
+  (send!          [this record] [this topic k v] [this topic k v headers]
     "Produce a record on a topic.
      When using the single arity version, a map
      with the following possible keys is expected:
-     `:key`, `:topic`, `:partition`, and `:value`.
+     `:key`, `:topic`, `:partition`, `:headers`, `:timestamp` and `:value`.
      ")
   (flush!         [this]
     "Ensure that produced messages are flushed.")
@@ -336,6 +341,14 @@
   "
   (comp (map :by-partition) (mapcat vals) cat))
 
+(defn headers->map [^Headers headers]
+  "Build a clojure map out of Kafka Headers from the returned RecordHeaders object. As the Kafka Headers can have
+  duplicates, the map returned merges any such cases: {:h1 [\"123\" \"456\"] :h2 [\"Hello\"]}"
+  (apply merge-with into {} (map (fn [^Header header]
+                                   {(keyword (.key header))
+                                    [(slurp (.value header) :encoding "UTF-8")]})
+                                 headers)))
+
 (defn cr->data
   "Yield a clojure representation of a consumer record"
   [^ConsumerRecord cr]
@@ -344,7 +357,8 @@
    :partition (.partition cr)
    :timestamp (.timestamp cr)
    :topic     (.topic cr)
-   :value     (.value cr)})
+   :value     (.value cr)
+   :headers   (headers->map (.headers cr))})
 
 (defn consumer-records->data
   "Yield the clojure representation of topic"
@@ -452,19 +466,48 @@
     (poll! consumer timeout)
     (catch WakeupException _)))
 
+(defn ->header
+  "Build a Kafka header from a key and a value"
+  (^Header
+   [[k v]]
+   (->header k v))
+  (^Header
+   [k v]
+   (reify
+     Header
+     (key [_] (if (keyword? k) (name k) (str k)))
+     (value [_] (byte-array (map byte (str v))))
+     (toString [_] (str "RecordHeader(key = " k ", value = " v ")")))))
+
+(defn ->headers [headers]
+  "Build Kafka headers from a clojure map."
+  (map ->header headers))
+
 (defn ->record
   "Build a producer record from a clojure map. Leave ProducerRecord instances
    untouched."
   [payload]
   (if (instance? ProducerRecord payload)
     payload
-    (let [{:keys [partition key value]} payload
+    (let [{:keys [partition key value headers timestamp]} payload
           topic                         (some-> payload :topic name)]
       (cond
         (nil? topic)
         (throw (ex-info "Need a topic to send to" {:payload payload}))
 
-        (and key partition)
+        (and headers (nil? timestamp) (nil? partition))
+        (throw (ex-info "Need a partition and/or timestamp if you want to add headers" {:payload payload}))
+
+        (and partition timestamp key headers)
+        (ProducerRecord. (str topic) (int partition) (long timestamp) key value (->headers headers))
+
+        (and partition timestamp key)
+        (ProducerRecord. (str topic) (int partition) (long timestamp) key value)
+
+        (and partition key headers)
+        (ProducerRecord. (str topic) (int partition) key value (->headers headers))
+
+        (and partition key)
         (ProducerRecord. (str topic) (int partition) key value)
 
         key
@@ -496,6 +539,9 @@
       (.send producer (->record record)))
     (send! [this topic k v]
       (.send producer (->record {:key k :value v :topic topic})))
+    (send! [this topic k v headers]
+      "Defaults partition and timestamp to 0, if you need to set either, use the single arity version"
+      (.send producer (->record {:key k :value v :topic topic :headers headers :partition 0 :timestamp 11})))
     (flush! [this]
       (.flush producer))
     (init-transactions! [this]

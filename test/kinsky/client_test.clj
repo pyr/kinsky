@@ -146,3 +146,34 @@
                   (apply concat)
                   (map :value))
            (vals msgs))))))
+
+(deftest headers
+  (testing "Kafka Headers, making sure we have implemented the interfaces required by the Producer and Consumer
+            to process the key value pairs. NOTE: all header values returned will be converted to string values.
+            The first test header has duplicate keys :h1 and \"h1\" as the implementation converts all keywords
+            to strings before storing them in the Headers ArrayList and converts them back to keywords when converting
+            them back to a Clojure map. Duplicate key values are a valid scenario in Kafka for some wierd reason."
+    (let [headers (client/->headers {:h1 1 :h2 2.0 "h1" "foo"})
+          producer (org.apache.kafka.clients.producer.ProducerRecord. "test" (int 0) "key" "value" headers)
+          r-headers (.headers producer)]
+      (is (instance? org.apache.kafka.common.header.Header (client/->header :h "foo")))
+      (is (= "RecordHeader(key = :h1, value = Foo)" (.toString (client/->header :h1 "Foo"))))
+      (is (contains? (supers (class headers)) java.lang.Iterable))
+      (is (instance? org.apache.kafka.common.header.Headers (.headers producer)))
+      (is (= {:h1 ["1" "foo"] :h2 ["2.0"]} (client/headers->map r-headers))))))
+
+(deftest producer-record
+  (testing "The 6 different ProducerRecord combinations and one with headers and not partition or timestamp"
+    (is (= "ProducerRecord(topic=test, partition=null, headers=RecordHeaders(headers = [], isReadOnly = false), key=null, value=Value, timestamp=null)"
+           (.toString (client/->record {:topic "test" :value "Value"}))))
+    (is (= "ProducerRecord(topic=test, partition=null, headers=RecordHeaders(headers = [], isReadOnly = false), key=Key, value=Value, timestamp=null)"
+           (.toString (client/->record {:topic "test" :key "Key" :value "Value"}))))
+    (is (= "ProducerRecord(topic=test, partition=0, headers=RecordHeaders(headers = [], isReadOnly = false), key=Key, value=Value, timestamp=null)"
+           (.toString (client/->record {:topic "test" :partition 0 :key "Key" :value "Value"}))))
+    (is (= "ProducerRecord(topic=test, partition=1, headers=RecordHeaders(headers = [], isReadOnly = false), key=Key, value=Value, timestamp=65535)"
+           (.toString (client/->record {:topic "test" :partition 1 :timestamp 65535 :key "Key" :value "Value"}))))
+    (is (= "ProducerRecord(topic=test, partition=2, headers=RecordHeaders(headers = [RecordHeader(key = :h1, value = one)], isReadOnly = false), key=Key, value=Value, timestamp=null)"
+           (.toString (client/->record {:topic "test" :partition 2 :key "Key" :value "Value" :headers {:h1 "one"}}))))
+    (is (= "ProducerRecord(topic=test, partition=2, headers=RecordHeaders(headers = [RecordHeader(key = :h1, value = one)], isReadOnly = false), key=Key, value=Value, timestamp=1234567890)"
+           (.toString (client/->record {:topic "test" :partition 2 :timestamp 1234567890 :key "Key" :value "Value" :headers {:h1 "one"}}))))
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Need a partition and/or timestamp if you want to add headers" (.toString (client/->record {:topic "test" :key "Key" :value "Value" :headers {:h1 "one"}}))))))
