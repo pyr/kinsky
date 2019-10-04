@@ -3,25 +3,25 @@
    See https://github.com/pyr/kinsky for example usage."
   (:require [clojure.edn           :as edn]
             [cheshire.core         :as json])
-  (:import java.util.Collection
-           java.util.Map
-           java.util.concurrent.TimeUnit
-           java.util.regex.Pattern
-           org.apache.kafka.clients.consumer.ConsumerRebalanceListener
-           org.apache.kafka.clients.consumer.ConsumerRecord
-           org.apache.kafka.clients.consumer.ConsumerRecords
-           org.apache.kafka.clients.consumer.KafkaConsumer
-           org.apache.kafka.clients.consumer.OffsetAndMetadata
-           org.apache.kafka.clients.producer.KafkaProducer
-           org.apache.kafka.clients.producer.ProducerRecord
-           org.apache.kafka.common.Node
-           org.apache.kafka.common.PartitionInfo
-           org.apache.kafka.common.TopicPartition
-           org.apache.kafka.common.errors.WakeupException
-           org.apache.kafka.common.serialization.Deserializer
-           org.apache.kafka.common.serialization.Serializer
-           org.apache.kafka.common.serialization.StringDeserializer
-           org.apache.kafka.common.serialization.StringSerializer))
+  (:import (java.util Collection)
+           (java.util Map)
+           (java.util.concurrent TimeUnit)
+           (java.util.regex Pattern)
+           (org.apache.kafka.clients.consumer ConsumerRebalanceListener
+                                              ConsumerRecord
+                                              ConsumerRecords
+                                              KafkaConsumer
+                                              OffsetAndMetadata)
+           (org.apache.kafka.clients.producer KafkaProducer
+                                              ProducerRecord)
+           (org.apache.kafka.common Node
+                                    PartitionInfo
+                                    TopicPartition)
+           (org.apache.kafka.common.errors WakeupException)
+           (org.apache.kafka.common.serialization Deserializer
+                                                  Serializer
+                                                  StringDeserializer
+                                                  StringSerializer)))
 
 (defprotocol MetadataDriver
   "Common properties for all drivers"
@@ -229,7 +229,8 @@
     (fn? x)     (x)
     :else        x))
 
-(defn ^Serializer ->serializer
+(defn ->serializer
+  ^Serializer
   [x]
   (cond
     (keyword? x) (if-let [f (serializers x)]
@@ -238,23 +239,23 @@
     (fn? x)     (x)
     :else        x))
 
-(defn ^Map opts->props
+(defn opts->props
   "Kakfa configs are now maps of strings to strings. Morph an arbitrary
   clojure map into this representation.  Make sure we don't pass
   options that are meant for the driver with "
-  [opts]
+  ^Map [opts]
   (into {}
         (comp
          (filter (fn [[k _]] (not (qualified-keyword? k))))
          (map (fn [[k v]] [(name k) (str v)])))
         opts))
 
-(defn ^ConsumerRebalanceListener rebalance-listener
+(defn rebalance-listener
   "Wrap a callback to yield an instance of a Kafka ConsumerRebalanceListener.
    The callback is a function of one argument, a map containing the following
    keys: :event, :topic and :partition. :event will be either :assigned or
    :revoked."
-  [callback]
+  ^ConsumerRebalanceListener [callback]
   (if (instance? ConsumerRebalanceListener callback)
     callback
     (let [->part  (fn [^TopicPartition p] {:topic (.topic p) :partition (.partition p)})
@@ -270,7 +271,7 @@
 
 (defn ->topic-partition
   "Yield a TopicPartition from a clojure map."
-  [{:keys [topic partition]}]
+  ^TopicPartition [{:keys [topic partition]}]
   (TopicPartition. (name topic) (int partition)))
 
 (defn ->offset-metadata
@@ -360,12 +361,12 @@
 (defn crs-for-topic->eduction
   "Returns an Eduction for records by topics"
   [^ConsumerRecords crs ^String topic]
-  (eduction (map cr->data) (.records topic)))
+  (eduction (map cr->data) (.records crs topic)))
 
 (defn crs-for-topic+partition->eduction
   "Returns an Eduction for records for TopicPartition"
   [^ConsumerRecords crs ^TopicPartition tp]
-  (eduction (map cr->data) (.records tp)))
+  (eduction (map cr->data) (.records crs tp)))
 
 (defn consumer-records->data
   "Yield the default Clojure representation of topic"
@@ -382,8 +383,9 @@
      :by-topic     (group-by :topic edc)
      :by-partition (group-by (juxt :topic :partition) edc)}))
 
-(defn ^Collection ->topics
+(defn ->topics
   "Yield a valid object for subscription"
+  ^Collection
   [topics]
   (cond
     (keyword? topics)             [(name topics)]
@@ -417,7 +419,7 @@
    (reify
      ConsumerDriver
      (poll! [this timeout]
-       (consumer-decoder-fn (.poll consumer timeout)))
+       (consumer-decoder-fn (.poll consumer (java.time.Duration/ofMillis timeout))))
      (stop! [this]
        (stop! this 0))
      (stop! [this timeout]
@@ -455,12 +457,14 @@
      (commit! [this]
        (.commitSync consumer))
      (commit! [this topic-offsets]
-       (.commitSync consumer
-                    (->> topic-offsets
-                         (map (juxt ->topic-partition ->offset-metadata))
-                         (reduce merge {}))))
+       (let [offsets (->> topic-offsets
+                          (map (juxt ->topic-partition ->offset-metadata))
+                          (reduce merge {}))]
+         (.commitSync consumer ^Map offsets)))
     (seek! [this topic-partition offset]
-        (.seek consumer (->topic-partition topic-partition) offset))
+      (.seek consumer
+             (->topic-partition topic-partition)
+             (long offset)))
     (position! [this topic-partition]
       (.position consumer (->topic-partition topic-partition)))
      (subscription [this]

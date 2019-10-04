@@ -14,6 +14,7 @@
   :test-selectors {:default     (complement :integration)
                    :integration :integration
                    :all         (constantly true)}
+  :global-vars {*warn-on-reflection* true}
   :profiles {:dev {:dependencies [[org.slf4j/slf4j-nop "1.7.25"]
                                   ;; for kafka embedded
                                   [org.apache.kafka/kafka_2.12 "2.3.0"]
