@@ -8,6 +8,7 @@
   :codox {:source-uri "https://github.com/pyr/kinsky/blob/{version}/{filepath}#L{line}"
           :metadata   {:doc/format :markdown}}
   :global-vars {*warn-on-reflection* true}
+  :deploy-repositories [["snapshots" :clojars] ["releases" :clojars]]
   :dependencies [[org.clojure/clojure            "1.10.0"]
                  [org.clojure/core.async         "0.4.490"]
                  [org.apache.kafka/kafka-clients "2.3.0"]
