@@ -119,33 +119,82 @@
       (client/subscribe! consumer [:x :y :z]))))
 
 (deftest roundtrip
-  (testing "msg roundtrip"
-    (let [t "account"
-          p (client/producer {:bootstrap.servers bootstrap-servers}
-                             (client/keyword-serializer)
-                             (client/edn-serializer))
-          c (client/consumer {:bootstrap.servers bootstrap-servers
-                              :group.id "consumer-group-id"
-                              "enable.auto.commit" "false"
-                              "auto.offset.reset" "earliest"
-                              "isolation.level" "read_committed"}
-                             (client/keyword-deserializer)
-                             (client/edn-deserializer))
-          msgs {:account-a {:action :login}
-                :account-b {:action :logout}
-                :account-c {:action :register}}]
+  (let [msgs {:account-a {:action :login}
+              :account-b {:action :logout}
+              :account-c {:action :register}}
+        p (client/producer {:bootstrap.servers bootstrap-servers}
+                           (client/keyword-serializer)
+                           (client/edn-serializer))
+        base-consumer-conf {:bootstrap.servers bootstrap-servers
+                            "enable.auto.commit" "false"
+                            "auto.offset.reset" "earliest"
+                            "isolation.level" "read_committed"}
+        d (client/keyword-deserializer)
+        s (client/edn-deserializer)
+        setup! (fn [c t]
+                 (client/subscribe! c t)
+                 (doseq [[k v] msgs]
+                   @(client/send! p t k v)))]
+    (testing "msg roundtrip"
+      (let [t "account"
+            c (client/consumer (assoc base-consumer-conf
+                                      :group.id "consumer-group-id-1")
+                               d s)]
+        (setup! c t)
+        (is (= (->> (client/poll! c 5000)
+                    :by-topic
+                    vals
+                    (apply concat)
+                    (map :value))
+               (vals msgs)))))
 
-      (client/subscribe! c t)
+    (testing "msg roundtrip crs->eduction simple"
+      (let [t "account2"
+            c (client/consumer (assoc base-consumer-conf
+                                      :group.id "consumer-group-id-2"
+                                      :kinsky.client/consumer-decoder-fn
+                                      #(into [] (client/crs->eduction %)))
+                               d s)]
+        (setup! c t)
+        (is (= (->> (client/poll! c 5000)
+                    (map :value))
+               (vals msgs)))))
 
-      (doseq [[k v] msgs]
-        @(client/send! p t k v))
+    (testing "msg roundtrip crs-for-topic->eduction"
+      (let [t "account3"
+            c (client/consumer (assoc base-consumer-conf
+                                      :group.id "consumer-group-id-3"
+                                      :kinsky.client/consumer-decoder-fn
+                                      #(into [] (client/crs-for-topic->eduction % t)))
+                               d s)]
+        (setup! c t)
+        (is (= (->> (client/poll! c 5000)
+                    (map :value))
+               (vals msgs)))))
 
-      (is (= (->> (client/poll! c 5000)
-                  :by-topic
-                  vals
-                  (apply concat)
-                  (map :value))
-           (vals msgs))))))
+    (testing "msg roundtrip crs-for-topic->eduction"
+      (let [t "account4"
+            c (client/consumer (assoc base-consumer-conf
+                                      :group.id "consumer-group-id-4"
+                                      :kinsky.client/consumer-decoder-fn
+                                      #(into [] (client/crs-for-topic+partition->eduction % t 0)))
+                               d s)]
+        (setup! c t)
+        (is (= (->> (client/poll! c 5000)
+                    (map :value))
+               (vals msgs)))))
+
+    (testing "msg roundtrip crs->eduction sequence"
+      (let [t "account5"
+            c (client/consumer (assoc base-consumer-conf
+                                      :group.id "consumer-group-id-5"
+                                      :kinsky.client/consumer-decoder-fn
+                                      #(sequence (client/crs-for-topic+partition->eduction % t 0)))
+                               d s)]
+        (setup! c t)
+        (is (= (->> (client/poll! c 5000)
+                    (map :value))
+               (vals msgs)))))))
 
 (deftest headers
   (testing "Kafka Headers, making sure we have implemented the interfaces required by the Producer and Consumer
