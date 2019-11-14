@@ -1,7 +1,7 @@
 Kinsky: Clojure Kafka client library
 ====================================
 
-[![Build Status](https://secure.travis-ci.org/pyr/kinsky.png)](http://travis-ci.org/pyr/kinsky)
+[![Build Status](https://secure.travis-ci.org/pyr/kinsky.svg)](http://travis-ci.org/pyr/kinsky)
 
 Kinsky is a *somewhat* opinionated client library
 for [Apache Kafka](http://kafka.apache.org) in Clojure.
