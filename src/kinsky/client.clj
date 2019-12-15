@@ -147,9 +147,14 @@
      ")
   (flush!         [this]
     "Ensure that produced messages are flushed.")
-  (init-transactions! [this])
-  (begin-transaction! [this])
-  (commit-transaction! [this]))
+  (init-transactions!  [this]
+    "To be called once when a `transactional.id` is configured.")
+  (begin-transaction!  [this]
+    "Initiate a new transaction.")
+  (commit-transaction! [this]
+    "Commits the ongoing transaction.")
+  (abort-transaction!  [this]
+    "Aborts the ongoing transaction."))
 
 (defprotocol GenericDriver
   (close!         [this] [this timeout]
@@ -640,6 +645,8 @@
       (.beginTransaction producer))
     (commit-transaction! [this]
       (.commitTransaction producer))
+    (abort-transaction! [this]
+      (.abortTransaction producer))
     MetadataDriver
     (partitions-for [this topic]
       (mapv partition-info->data (.partitionsFor producer topic)))
