@@ -456,6 +456,14 @@
     (instance? Pattern topics)    topics
     :else (throw (ex-info "topics argument is invalid" {:topics topics}))))
 
+(def consumer-counter (atom 0))
+(defn opts->consumer-id
+  ^String
+  [opts]
+  (str "kinsky-consumer-" (swap! consumer-counter inc) "-"
+       (get opts "group.id" "") "-"
+       (get opts "client.id" "") "-"))
+
 (defn consumer->driver
   "Given a KafkaConsumer and an optional callback to call when stopping,
    yield a consumer driver.
@@ -467,6 +475,7 @@
    - `clojure.lang.IDeref`: `deref` to access underlying
      [KafkaConsumer](http://kafka.apache.org/090/javadoc/org/apache/kafka/clients/producer/KafkaConsumer.html)
      instance.
+   - `java.lang.Object`: `.toString` produces the kinsky consumer `id`.
 
   The consumer-driver can also take options:
 
@@ -477,57 +486,61 @@
    (consumer->driver consumer nil))
   ([^KafkaConsumer consumer
     {::keys [run-fn consumer-decoder-fn]
-     :or {consumer-decoder-fn consumer-records->data}}]
-   (reify
-     ConsumerDriver
-     (poll! [this timeout]
-       (consumer-decoder-fn (.poll consumer (java.time.Duration/ofMillis timeout))))
-     (stop! [this]
-       (stop! this 0))
-     (stop! [this timeout]
-       (when (fn? run-fn)
-         (run-fn))
-       (.wakeup consumer))
-     (pause! [this topic-partitions]
-       (.pause consumer
-               (map ->topic-partition topic-partitions)))
-     (resume! [this topic-partitions]
-       (.resume consumer
-                (map ->topic-partition topic-partitions)))
-     (subscribe! [this topics]
-       (.subscribe consumer (->topics topics)))
-     (subscribe! [this topics listener]
-       (.subscribe consumer (->topics topics) (rebalance-listener listener)))
-     (unsubscribe! [this]
-       (.unsubscribe consumer))
-     (wake-up! [this]
-       (.wakeup consumer))
-     (commit! [this]
-       (.commitSync consumer))
-     (commit! [this topic-offsets]
-       (let [offsets (->> topic-offsets
-                          (map (juxt ->topic-partition ->offset-metadata))
-                          (reduce merge {}))]
-         (.commitSync consumer ^Map offsets)))
-     (seek! [this topic-partition offset]
-       (.seek consumer (->topic-partition topic-partition) (long offset)))
-     (seek-beginning! [this topic-partitions]
-       (.seekToBeginning consumer (map ->topic-partition topic-partitions)))
-     (seek-end! [this topic-partitions]
-       (.seekToEnd consumer (map ->topic-partition topic-partitions)))
-     (position! [this topic-partition]
-       (.position consumer (->topic-partition topic-partition)))
-     (subscription [this]
-       (.subscription consumer))
-     GenericDriver
-     (close! [this]
-       (.close consumer))
-     MetadataDriver
-     (partitions-for [this topic]
-       (mapv partition-info->data (.partitionsFor consumer topic)))
-     clojure.lang.IDeref
-     (deref [this]
-       consumer))))
+     :or {consumer-decoder-fn consumer-records->data}
+     :as config}]
+   (let [id (opts->consumer-id config)]
+     (reify
+       ConsumerDriver
+       (poll! [this timeout]
+         (consumer-decoder-fn (.poll consumer (java.time.Duration/ofMillis timeout))))
+       (stop! [this]
+         (stop! this 0))
+       (stop! [this timeout]
+         (when (fn? run-fn)
+           (run-fn))
+         (.wakeup consumer))
+       (pause! [this topic-partitions]
+         (.pause consumer
+                 (map ->topic-partition topic-partitions)))
+       (resume! [this topic-partitions]
+         (.resume consumer
+                  (map ->topic-partition topic-partitions)))
+       (subscribe! [this topics]
+         (.subscribe consumer (->topics topics)))
+       (subscribe! [this topics listener]
+         (.subscribe consumer (->topics topics) (rebalance-listener listener)))
+       (unsubscribe! [this]
+         (.unsubscribe consumer))
+       (wake-up! [this]
+         (.wakeup consumer))
+       (commit! [this]
+         (.commitSync consumer))
+       (commit! [this topic-offsets]
+         (let [offsets (->> topic-offsets
+                            (map (juxt ->topic-partition ->offset-metadata))
+                            (reduce merge {}))]
+           (.commitSync consumer ^Map offsets)))
+       (seek! [this topic-partition offset]
+         (.seek consumer (->topic-partition topic-partition) (long offset)))
+       (seek-beginning! [this topic-partitions]
+         (.seekToBeginning consumer (map ->topic-partition topic-partitions)))
+       (seek-end! [this topic-partitions]
+         (.seekToEnd consumer (map ->topic-partition topic-partitions)))
+       (position! [this topic-partition]
+         (.position consumer (->topic-partition topic-partition)))
+       (subscription [this]
+         (.subscription consumer))
+       GenericDriver
+       (close! [this]
+         (.close consumer))
+       MetadataDriver
+       (partitions-for [this topic]
+         (mapv partition-info->data (.partitionsFor consumer topic)))
+       clojure.lang.IDeref
+       (deref [this]
+         consumer)
+       Object
+       (toString [this] id)))))
 
 (defn safe-poll!
   "Implementation of poll which disregards wake-up exceptions"
@@ -602,6 +615,14 @@
       (onCompletion [_ record-metadata exception]
         (f (some-> record-metadata rm->data) exception)))))
 
+(def producer-counter (atom 0))
+(defn opts->producer-id
+  ^String
+  [opts]
+  (str "kinsky-producer-" (swap! producer-counter inc) "-"
+       (get opts "transaction.id" "") "-"
+       (get opts "client.id" "") "-"))
+
 (defn producer->driver
   "Yield a driver from a Kafka Producer.
    The producer driver implements the following protocols:
@@ -610,49 +631,55 @@
    - [MetadataDriver](#var-MetadataDriver)
    - `clojure.lang.IDeref`: `deref` to access underlying
      [KafkaProducer](http://kafka.apache.org/090/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html)
-     instance."
-  [^KafkaProducer producer]
-  (reify
-    GenericDriver
-    (close! [this]
-      (.close producer))
-    (close! [this timeout]
-      (if (nil? timeout)
-        (.close producer)
-        (.close producer (long timeout) TimeUnit/MILLISECONDS)))
-    ProducerDriver
-    (send! [this record]
-      (.send producer (->record record)))
-    (send! [this topic k v]
-      (.send producer (->record {:key k :value v :topic topic})))
-    (send! [this topic k v headers]
-      (.send producer (->record {:key k :value v :topic topic :headers headers})))
-    (send-cb! [this record cb]
-      (.send producer (->record record) (->callback cb)))
-    (send-cb! [this topic k v cb]
-      (.send producer
-             (->record {:key k :value v :topic topic})
-             (->callback cb)))
-    (send-cb! [this topic k v headers cb]
-      (.send producer
-             (->record {:key k :value v :topic topic :headers headers})
-             (->callback cb)))
-    (flush! [this]
-      (.flush producer))
-    (init-transactions! [this]
-      (.initTransactions producer))
-    (begin-transaction! [this]
-      (.beginTransaction producer))
-    (commit-transaction! [this]
-      (.commitTransaction producer))
-    (abort-transaction! [this]
-      (.abortTransaction producer))
-    MetadataDriver
-    (partitions-for [this topic]
-      (mapv partition-info->data (.partitionsFor producer topic)))
-    clojure.lang.IDeref
-    (deref [this]
-      producer)))
+     instance.
+   - `java.lang.Object`: `.toString` produces the kinsky producer `id`."
+  ([^KafkaProducer producer]
+   (producer->driver producer nil))
+  ([^KafkaProducer producer config]
+   (let [id (opts->producer-id config)]
+     (reify
+       GenericDriver
+       (close! [this]
+         (.close producer))
+       (close! [this timeout]
+         (if (nil? timeout)
+           (.close producer)
+           (.close producer (long timeout) TimeUnit/MILLISECONDS)))
+       ProducerDriver
+       (send! [this record]
+         (.send producer (->record record)))
+       (send! [this topic k v]
+         (.send producer (->record {:key k :value v :topic topic})))
+       (send! [this topic k v headers]
+         (.send producer (->record {:key k :value v :topic topic :headers headers})))
+       (send-cb! [this record cb]
+         (.send producer (->record record) (->callback cb)))
+       (send-cb! [this topic k v cb]
+         (.send producer
+                (->record {:key k :value v :topic topic})
+                (->callback cb)))
+       (send-cb! [this topic k v headers cb]
+         (.send producer
+                (->record {:key k :value v :topic topic :headers headers})
+                (->callback cb)))
+       (flush! [this]
+         (.flush producer))
+       (init-transactions! [this]
+         (.initTransactions producer))
+       (begin-transaction! [this]
+         (.beginTransaction producer))
+       (commit-transaction! [this]
+         (.commitTransaction producer))
+       (abort-transaction! [this]
+         (.abortTransaction producer))
+       MetadataDriver
+       (partitions-for [this topic]
+         (mapv partition-info->data (.partitionsFor producer topic)))
+       clojure.lang.IDeref
+       (deref [this]
+         producer)
+       Object
+       (toString [this] id)))))
 
 (defn producer
   "Create a producer from a configuration and optional serializers.
@@ -660,16 +687,17 @@
    and values. If none are provided, the configuration is expected to
    hold serializer class names."
   ([config]
-   (producer->driver (KafkaProducer. (opts->props config))))
+   (producer->driver (KafkaProducer. (opts->props config)) config))
   ([config serializer]
    (producer->driver (KafkaProducer. (opts->props config)
                                      (->serializer serializer)
-                                     (->serializer serializer))))
+                                     (->serializer serializer))
+                     config))
   ([config kserializer vserializer]
    (producer->driver (KafkaProducer. (opts->props config)
                                      (->serializer kserializer)
-                                     (->serializer vserializer)))))
-
+                                     (->serializer vserializer))
+                     config)))
 (defn consumer
   "Create a consumer from a configuration and optional deserializers.
    If a callback is given, call it when stopping the consumer.

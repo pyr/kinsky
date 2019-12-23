@@ -53,6 +53,7 @@ Thanks a lot to these awesome contributors
 ### 0.1.25
 
 - Removal of the asynchronous façade, transducers should suffice
+- Consumer+Producer: added name and counter to support toString
 - Producer: added send-cb! function that takes a callback fn
 - Producer: added abort-transaction! function
 - Consumer: added seek-beginning! and seek-end!
