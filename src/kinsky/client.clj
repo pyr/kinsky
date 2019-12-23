@@ -533,6 +533,10 @@
        GenericDriver
        (close! [this]
          (.close consumer))
+       (close! [this timeout]
+         (if (nil? timeout)
+           (.close consumer)
+           (.close consumer (long timeout) TimeUnit/MILLISECONDS)))
        MetadataDriver
        (partitions-for [this topic]
          (mapv partition-info->data (.partitionsFor consumer topic)))
