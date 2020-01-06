@@ -2,7 +2,7 @@
   "Small clojure shim on top of the Kafka client API
    See https://github.com/pyr/kinsky for example usage."
   (:require [clojure.edn           :as edn]
-            [cheshire.core         :as json])
+            [jsonista.core         :as json])
   (:import (java.util Collection)
            (java.util Map)
            (java.util.concurrent TimeUnit)
@@ -160,7 +160,7 @@
   "Serialize as JSON through cheshire."
   []
   (serializer
-   (fn [_ payload] (some-> payload json/generate-string .getBytes))))
+   (fn [_ payload] (some-> payload json/write-value-as-bytes))))
 
 (defn keyword-serializer
   "Serialize keywords to strings, useful for keys."
@@ -199,10 +199,12 @@
 (defn json-deserializer
   "Deserialize JSON."
   []
-  (deserializer
-   (fn [_ #^"[B" payload]
-     (when payload
-       (json/parse-string (String. payload "UTF-8") true)))))
+  (let [mapper (json/object-mapper {:encode-key-fn name
+                                    :decode-key-fn keyword})]
+    (deserializer
+     (fn [_ #^"[B" payload]
+       (when payload
+         (json/read-value payload mapper))))))
 
 (defn keyword-deserializer
   "Deserialize a string and then keywordize it."
