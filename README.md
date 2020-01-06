@@ -12,7 +12,6 @@ Kinsky provides the following:
 - Adequate data representation of Kafka types.
 - Default serializer and deserializer implementations such as
   **JSON**, **EDN** and a **keyword** serializer for keys.
-- A `core.async` facade for producers and consumers.
 - Documentation
 
 ## Usage
@@ -48,6 +47,10 @@ Thanks a lot to these awesome contributors
 
 ## Changelog
 
+### 0.1.25
+
+- Removal of the asynchronous façade, transducers should suffice
+
 ### 0.1.24
 
 - Add support for producer transaction
@@ -78,9 +81,7 @@ Thanks a lot to these awesome contributors
 The examples assume the following require forms:
 
 ```clojure
-(:require [kinsky.client      :as client]
-          [kinsky.async       :as async]
-          [clojure.core.async :as a :refer [go <! >!]])
+(:require [kinsky.client :as client])
 ```
 
 ### Production
@@ -93,15 +94,6 @@ The examples assume the following require forms:
 
 ```
 
-Async facade:
-
-```clojure
-(let [ch (async/producer {:bootstrap.servers "localhost:9092"} :keyword :edn)]
-   (go
-     (>! ch {:topic "account" :key :account-a :value {:action :login}})
-     (>! ch {:topic "account" :key :account-a :value {:action :logout}})))
-```
-
 ### Consumption
 
 ```clojure
@@ -112,49 +104,4 @@ Async facade:
   (client/subscribe! c "account")
   (client/poll! c 100))
 
-```
-
-Async facade:
-
-```clojure
-(let [ch     (async/consumer {:bootstrap.servers "localhost:9092"
-                              :group.id (str (java.util.UUID/randomUUID))}
-                             (client/string-deserializer)
-                             (client/string-deserializer))
-      topic  "tests"]
-						  
-  (a/go-loop []
-    (when-let [record (a/<! ch)]
-      (println (pr-str record))
-      (recur)))
-  (a/put! ch {:op :partitions-for :topic topic})
-  (a/put! ch {:op :subscribe :topic topic})
-  (a/put! ch {:op :commit})
-  (a/put! ch {:op :pause :topic-partitions [{:topic topic :partition 0}
-                                             {:topic topic :partition 1}
-                                             {:topic topic :partition 2}
-                                             {:topic topic :partition 3}]})
-  (a/put! ch {:op :resume :topic-partitions [{:topic topic :partition 0}
-                                              {:topic topic :partition 1}
-                                              {:topic topic :partition 2}
-                                              {:topic topic :partition 3}]})
-  (a/put! ch {:op :stop}))
-```
-
-### Examples
-
-#### Fusing two topics
-
-```clojure
-  (let [popts {:bootstrap.servers "localhost:9092"}
-        copts (assoc popts :group.id "consumer-group-id")
-        c-ch  (kinsky.async/consumer copts :string :string)
-        p-ch  (kinsky.async/producer popts :string :string)]
-
-    (a/go
-      ;; fuse topics
-	  (a/>! c-ch {:op :subscribe :topic "test1"})
-      (let [transit (a/chan 10 (map #(assoc % :topic "test2")))]
-        (a/pipe c-ch transit)
-        (a/pipe transit p-ch))))
 ```
