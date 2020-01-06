@@ -568,7 +568,7 @@
       (.send producer (->record {:key k :value v :topic topic})))
     (send! [this topic k v headers]
       "Defaults partition and timestamp to 0, if you need to set either, use the single arity version"
-      (.send producer (->record {:key k :value v :topic topic :headers headers :partition 0 :timestamp 11})))
+      (.send producer (->record {:key k :value v :topic topic :headers headers})))
     (flush! [this]
       (.flush producer))
     (init-transactions! [this]
