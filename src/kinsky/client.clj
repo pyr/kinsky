@@ -351,6 +351,19 @@
   "
   (comp (map :by-partition) (mapcat vals) cat))
 
+(def value-meta-xform
+  "A transducer which acts like `record-xform` but directly yields values,
+   with record metadata stored in the map metadata"
+  (comp record-xform
+        (map (fn [{:keys [value] :as record}]
+               (with-meta value
+                 (select-keys record [:key :offset :partition :topic]))))))
+
+(def value-xform
+  "A transducer which acts like `record-xform` but directly yields values,
+   losing metadata"
+  (comp record-xform (map :value)))
+
 (defn headers->map [^Headers headers]
   "Build a clojure map out of Kafka Headers from the returned RecordHeaders object. As the Kafka Headers can have
   duplicates, the map returned merges any such cases: {:h1 [\"123\" \"456\"] :h2 [\"Hello\"]}"
