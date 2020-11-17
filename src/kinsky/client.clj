@@ -97,7 +97,7 @@
      function or an implementation of
      [ConsumerRebalanceListener](http://kafka.apache.org/090/javadoc/org/apache/kafka/clients/consumer/ConsumerRebalanceListener.html).
 
-     When a function is supplied, it will be called on relance
+     When a function is supplied, it will be called on rebalance
      events with a map representing the event, see
      [kinsky.client/rebalance-listener](#var-rebalance-listener)
      for details on the map format.")
