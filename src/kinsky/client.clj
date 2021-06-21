@@ -157,7 +157,7 @@
    (fn [_ payload] (some-> payload pr-str .getBytes))))
 
 (defn json-serializer
-  "Serialize as JSON through cheshire."
+  "Serialize as JSON through jsonista."
   []
   (serializer
    (fn [_ payload] (some-> payload json/write-value-as-bytes))))
