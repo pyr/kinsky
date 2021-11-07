@@ -152,23 +152,27 @@
 
 (defn edn-serializer
   "Serialize as EDN."
+  ^Serializer
   []
   (serializer
    (fn [_ payload] (some-> payload pr-str .getBytes))))
 
 (defn json-serializer
   "Serialize as JSON through jsonista."
+  ^Serializer
   []
   (serializer
    (fn [_ payload] (some-> payload json/write-value-as-bytes))))
 
 (defn keyword-serializer
   "Serialize keywords to strings, useful for keys."
+  ^Serializer
   []
   (serializer (fn [_ k] (some-> k name .getBytes))))
 
 (defn string-serializer
   "Kafka's own string serializer."
+  ^StringSerializer
   []
   (StringSerializer.))
 
@@ -185,12 +189,12 @@
 
 (defn edn-deserializer
   "Deserialize EDN."
-  ([]
+  (^Deserializer []
    (deserializer
     (fn [_ #^"[B" payload]
       (when payload
         (edn/read-string (String. payload "UTF-8"))))))
-  ([reader-opts]
+  (^Deserializer [reader-opts]
    (deserializer
     (fn [_ #^"[B" payload]
       (when payload
@@ -198,6 +202,7 @@
 
 (defn json-deserializer
   "Deserialize JSON."
+  ^Deserializer
   []
   (let [mapper (json/object-mapper {:encode-key-fn name
                                     :decode-key-fn keyword})]
@@ -208,11 +213,13 @@
 
 (defn keyword-deserializer
   "Deserialize a string and then keywordize it."
+  ^Deserializer
   []
   (deserializer (fn [_ #^"[B" k] (when k (keyword (String. k "UTF-8"))))))
 
 (defn string-deserializer
   "Kafka's own string deserializer"
+  ^StringDeserializer
   []
   (StringDeserializer.))
 
@@ -228,7 +235,8 @@
    :string  string-serializer
    :json    json-serializer})
 
-(defn ^Deserializer ->deserializer
+(defn ->deserializer
+  ^Deserializer
   [x]
   (cond
     (keyword? x) (if-let [f (deserializers x)]
@@ -539,6 +547,7 @@
 (defn ->record
   "Build a producer record from a clojure map. Leave ProducerRecord instances
    untouched."
+  ^ProducerRecord
   [payload]
   (if (instance? ProducerRecord payload)
     payload

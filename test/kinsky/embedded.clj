@@ -76,7 +76,7 @@
   [^ServerCnxnFactory server-cnxn-factory]
   (when server-cnxn-factory
     (.shutdown server-cnxn-factory)
-    (when-let [server ^ZooKeeperServer (-> (doto (.getDeclaredMethod ServerCnxnFactory
+    (when-let [^ZooKeeperServer server (-> (doto (.getDeclaredMethod ServerCnxnFactory
                                                                      "getZooKeeperServer"
                                                                      (make-array Class 0))
                                              (.setAccessible true))
