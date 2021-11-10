@@ -4,11 +4,11 @@ Kinsky: Clojure Kafka client library
 [![Build Status](https://secure.travis-ci.org/pyr/kinsky.svg)](http://travis-ci.org/pyr/kinsky)
 
 Kinsky is a *somewhat* opinionated client library
-for [Apache Kafka](http://kafka.apache.org) in Clojure.
+for [Apache Kafka](https://kafka.apache.org) in Clojure.
 
 Kinsky provides the following:
 
-- Kakfa 0.10.0.x compatibility
+- Kafka 2.4.x compatibility
 - Adequate data representation of Kafka types.
 - Default serializer and deserializer implementations such as
   **JSON**, **EDN** and a **keyword** serializer for keys.
@@ -22,7 +22,7 @@ Kinsky provides the following:
 
 ## Documentation
 
-* [API Documentation](http://pyr.github.io/kinsky)
+* [API Documentation](https://pyr.github.io/kinsky)
 
 ## Contributors
 

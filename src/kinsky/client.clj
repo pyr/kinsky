@@ -30,7 +30,7 @@
   (partitions-for [this topic]
     "Retrieve partition ownership information for a topic.
      The result is a data representation of a
-     [PartitionInfo](http://kafka.apache.org/090/javadoc/org/apache/kafka/common/PartitionInfo.html)
+     [PartitionInfo](https://kafka.apache.org/24/javadoc/org/apache/kafka/common/PartitionInfo.html)
      list.
      The structure for a partition info map is:
 
@@ -95,7 +95,7 @@
 
      The optional listener argument is either a callback
      function or an implementation of
-     [ConsumerRebalanceListener](http://kafka.apache.org/090/javadoc/org/apache/kafka/clients/consumer/ConsumerRebalanceListener.html).
+     [ConsumerRebalanceListener](https://kafka.apache.org/24/javadoc/org/apache/kafka/clients/consumer/ConsumerRebalanceListener.html).
 
      When a function is supplied, it will be called on rebalance
      events with a map representing the event, see
@@ -436,7 +436,7 @@
    - [ConsumerDriver](#var-ConsumerDriver)
    - [MetadataDriver](#var-MetadataDriver)
    - `clojure.lang.IDeref`: `deref` to access underlying
-     [KafkaConsumer](http://kafka.apache.org/090/javadoc/org/apache/kafka/clients/producer/KafkaConsumer.html)
+     [KafkaConsumer](https://kafka.apache.org/24/javadoc/org/apache/kafka/clients/consumer/KafkaConsumer.html)
      instance.
 
   The consumer-driver can also take options:
@@ -563,7 +563,7 @@
    - [ProducerDriver](#var-ProducerDriver)
    - [MetadataDriver](#var-MetadataDriver)
    - `clojure.lang.IDeref`: `deref` to access underlying
-     [KafkaProducer](http://kafka.apache.org/090/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html)
+     [KafkaProducer](https://kafka.apache.org/24/javadoc/org/apache/kafka/clients/producer/KafkaProducer.html)
      instance."
   [^KafkaProducer producer]
   (reify
