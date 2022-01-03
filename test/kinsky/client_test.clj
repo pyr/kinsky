@@ -1,5 +1,5 @@
 (ns kinsky.client-test
-  (:require [clojure.test  :refer :all :as t]
+  (:require [clojure.test :refer :all :as t]
             [clojure.pprint :as pp]
             [kinsky.client :as client]
             [kinsky.embedded :as e]))
@@ -32,22 +32,22 @@
   (testing "string serializer"
     (is (= "foo"
            (String.
-            (.serialize (client/string-serializer) "" "foo")))))
+             (.serialize (client/string-serializer) "" "foo")))))
 
   (testing "keyword serializer"
     (is (= "foo"
            (String.
-            (.serialize (client/keyword-serializer) "" :foo)))))
+             (.serialize (client/keyword-serializer) "" :foo)))))
 
   (testing "edn serializer"
     (is (= "{:a :b, :c :d}"
            (String.
-            (.serialize (client/edn-serializer) "" {:a :b :c :d})))))
+             (.serialize (client/edn-serializer) "" {:a :b :c :d})))))
 
   (testing "json serializer"
     (is (= "[0,1,2]"
            (String.
-            (.serialize (client/json-serializer) "" [0 1 2]))))))
+             (.serialize (client/json-serializer) "" [0 1 2]))))))
 
 (deftest deserializer
   (testing "string deserializer"
@@ -69,12 +69,14 @@
                          (.getBytes "{\"a\": \"b\", \"c\": \"d\"}"))))))
 
 (deftest config-props
-  (testing "valid configuration properties"
-    (is (= {"foo.bar" "0"}
-           (client/opts->props {:foo.bar 0})))))
+  (testing "configuration properties"
+    (is (= {"foo.bar" "0" "foo.baz" "1"}
+           (client/opts->props {:foo.bar 0
+                                "foo.baz" "1"
+                                :qualified/kw :discarded})))))
 
 (deftest rebalance-listener
-  (testing "idempotency"
+  (testing "identity when given a ConsumerRebalanceListener"
     (let [sink (client/rebalance-listener (fn [& _]))]
       (is (= sink (client/rebalance-listener sink)))))
 
