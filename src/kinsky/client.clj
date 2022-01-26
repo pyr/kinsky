@@ -196,9 +196,9 @@
         (edn/read-string (String. payload "UTF-8"))))))
   (^Deserializer [reader-opts]
    (deserializer
-    (fn [_ #^"[B" payload]
-      (when payload
-        (edn/read-string reader-opts (String. payload "UTF-8")))))))
+     (fn [_ #^"[B" payload]
+       (when payload
+         (edn/read-string reader-opts (String. payload "UTF-8")))))))
 
 (defn json-deserializer
   "Deserialize JSON."
@@ -322,7 +322,7 @@
   "A transducer to explode grouped records into individual
    entities.
 
-   When sucessful, the output of kinsky.client/poll! takes the
+   When successful, the output of kinsky.client/poll! takes the
    form:
 
        {:partitions   [[\"t\" 0] [\"t\" 1]]
@@ -372,9 +372,10 @@
    losing metadata"
   (comp record-xform (map :value)))
 
-(defn headers->map [^Headers headers]
+(defn headers->map
   "Build a clojure map out of Kafka Headers from the returned RecordHeaders object. As the Kafka Headers can have
   duplicates, the map returned merges any such cases: {:h1 [\"123\" \"456\"] :h2 [\"Hello\"]}"
+  [^Headers headers]
   (apply merge-with into {} (map (fn [^Header header]
                                    {(keyword (.key header))
                                     [(slurp (.value header) :encoding "UTF-8")]})
@@ -508,17 +509,17 @@
              (long offset)))
     (position! [this topic-partition]
       (.position consumer (->topic-partition topic-partition)))
-     (subscription [this]
-       (.subscription consumer))
+    (subscription [this]
+      (.subscription consumer))
     GenericDriver
     (close! [this]
       (.close consumer))
-     MetadataDriver
-     (partitions-for [this topic]
-       (mapv partition-info->data (.partitionsFor consumer topic)))
-     clojure.lang.IDeref
-     (deref [this]
-       consumer))))
+    MetadataDriver
+    (partitions-for [this topic]
+      (mapv partition-info->data (.partitionsFor consumer topic)))
+    clojure.lang.IDeref
+    (deref [this]
+      consumer))))
 
 (defn safe-poll!
   "Implementation of poll which disregards wake-up exceptions"
@@ -540,14 +541,14 @@
      (value [_] (byte-array (map byte (str v))))
      (toString [_] (str "RecordHeader(key = " k ", value = " v ")")))))
 
-(defn ->headers [headers]
+(defn ->headers
   "Build Kafka headers from a clojure map."
+  [headers]
   (map ->header headers))
 
-(defn ->record
+(defn ^ProducerRecord ->record
   "Build a producer record from a clojure map. Leave ProducerRecord instances
-   untouched."
-  ^ProducerRecord
+  untouched."
   [payload]
   (if (instance? ProducerRecord payload)
     payload
