@@ -7,7 +7,7 @@
   :global-vars {*warn-on-reflection* true}
   :deploy-repositories [["snapshots" :clojars] ["releases" :clojars]]
   :dependencies [[org.clojure/clojure            "1.10.1"]
-                 [org.apache.kafka/kafka-clients "2.4.0"]
+                 [org.apache.kafka/kafka-clients "2.7.2"]
                  [metosin/jsonista               "0.2.5"]]
   :test-selectors {:default     (complement :integration)
                    :integration :integration
@@ -15,7 +15,7 @@
   :profiles {:dev {:dependencies [[org.slf4j/slf4j-nop "1.7.30"]
                                   [org.slf4j/slf4j-api "1.7.30"]
                                   ;; for kafka embedded
-                                  [org.apache.kafka/kafka_2.12 "2.4.0"]
+                                  [org.apache.kafka/kafka_2.12 "2.7.2"]
                                   [org.apache.zookeeper/zookeeper "3.5.6"
                                    :exclusions [io.netty/netty
                                                 jline

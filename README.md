@@ -47,6 +47,10 @@ Thanks a lot to these awesome contributors
 
 ## Changelog
 
+### 0.1.26
+
+- Bump kafka dependency to v2.7.x
+
 ### 0.1.25
 
 - Removal of the asynchronous façade, transducers should suffice
